@@ -9,8 +9,9 @@ const targets = require("../config/targets.json");
 const { loadConfig, landedCost } = require("./_lib/landedCost");
 
 const FETCH_TIMEOUT_MS = 8000;
-const PRODUCTS_PER_SITE = 100;
-const MAX_ITEMS_PER_SITE = 12; // 사이트당 세일 상품 상위 N개만 (응답 크기 제한)
+const PRODUCTS_PER_PAGE = 250; // Shopify products.json이 허용하는 최대 limit
+const MAX_PAGES_PER_SITE = 4;  // 사이트당 최대 조회 페이지 (최대 1000개 상품까지 순회)
+const MAX_ITEMS_PER_SITE = 25; // 사이트당 세일 상품 상위 N개만 (응답 크기 제한). 프론트는 20개씩 "다음" 버튼으로 나눠 보여준다
 
 // 무게 실측치가 없을 때 쓰는 카테고리 평균 추정값. 관세·환율 수치가 아니라
 // 배송비 계산용 보정값이라 cost.yaml이 아니라 여기서 관리한다.
@@ -29,6 +30,15 @@ async function fetchWithTimeout(url) {
   } finally {
     clearTimeout(timer);
   }
+}
+
+// 스캔 시점 실시간 환율. 키가 필요 없는 무료 API(유럽중앙은행 기반)를 쓴다.
+// 실패하면 cost.yaml의 고정값을 그대로 쓴다 — cost.yaml 주석에도 "API 주입" 옵션이 이미 적혀 있었다.
+async function fetchLiveFxRates() {
+  const data = await fetchWithTimeout("https://api.frankfurter.dev/v1/latest?base=KRW&symbols=USD,EUR,JPY");
+  const r = data.rates;
+  if (!r || !r.USD || !r.EUR || !r.JPY) throw new Error("환율 응답 형식 이상");
+  return { USD: 1 / r.USD, EUR: 1 / r.EUR, JPY: 1 / r.JPY };
 }
 
 function extractSizeOptionIndex(product) {
@@ -106,11 +116,28 @@ function normalizeProduct(product, site) {
   };
 }
 
+async function fetchAllProducts(base) {
+  let all = [];
+  for (let page = 1; page <= MAX_PAGES_PER_SITE; page++) {
+    const url = `${base}/products.json?limit=${PRODUCTS_PER_PAGE}&page=${page}`;
+    let data;
+    try {
+      data = await fetchWithTimeout(url);
+    } catch (err) {
+      if (page === 1) throw err; // 첫 페이지 실패는 사이트 전체 실패로 처리
+      break; // 이후 페이지 실패는 그때까지 모은 상품으로 진행
+    }
+    const products = Array.isArray(data.products) ? data.products : [];
+    if (!products.length) break;
+    all = all.concat(products);
+    if (products.length < PRODUCTS_PER_PAGE) break; // 마지막 페이지
+  }
+  return all;
+}
+
 async function scanSite(site, cfg, mode) {
   const base = `https://${site.domain}`;
-  const url = `${base}/products.json?limit=${PRODUCTS_PER_SITE}`;
-  const data = await fetchWithTimeout(url);
-  const products = Array.isArray(data.products) ? data.products : [];
+  const products = await fetchAllProducts(base);
 
   const items = products
     .map((p) => normalizeProduct(p, site))
@@ -138,6 +165,16 @@ async function scanSite(site, cfg, mode) {
 module.exports = async function handler(req, res) {
   const mode = req.query && (req.query.mode === "business" ? "business" : "proxy");
   const cfg = loadConfig();
+
+  let fxSource = "cost.yaml 고정값";
+  try {
+    const liveFx = await fetchLiveFxRates();
+    cfg.fx.base_rate = { ...cfg.fx.base_rate, ...liveFx };
+    fxSource = "실시간(frankfurter.dev, ECB 기준)";
+  } catch (e) {
+    // 환율 API가 막히거나 실패하면 cost.yaml 고정값으로 계속 진행한다
+  }
+
   const allSites = [...targets.sites, ...(targets.sites_multi_brand || [])];
   const sites = allSites.filter((s) => s.platform === "shopify");
 
@@ -166,6 +203,8 @@ module.exports = async function handler(req, res) {
   res.status(200).json({
     scannedAt: new Date().toISOString(),
     mode,
+    fxRates: { USD: cfg.fx.base_rate.USD, EUR: cfg.fx.base_rate.EUR, JPY: cfg.fx.base_rate.JPY },
+    fxSource,
     sitesTotal: sites.length,
     sitesOk: sites.length - errors.length,
     sitesFailed: errors.length,

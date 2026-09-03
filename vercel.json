@@ -2,7 +2,7 @@
   "outputDirectory": "web",
   "functions": {
     "api/scan.js": {
-      "maxDuration": 30,
+      "maxDuration": 60,
       "includeFiles": "config/**"
     }
   }
