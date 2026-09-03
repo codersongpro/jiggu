@@ -63,17 +63,21 @@ function detectCategory(product, fallback) {
 
 function normalizeProduct(product, site) {
   const variants = Array.isArray(product.variants) ? product.variants : [];
-  const onSale = variants.filter((v) => {
+  const inStock = variants.filter((v) => v.available && parseFloat(v.price) > 0);
+  if (!inStock.length) return null;
+
+  // 세일 아니어도(환율·기본가 자체가 싼 경우) 상품탭에서 찾을 수 있어야 하므로
+  // 세일 variant가 없어도 걸러내지 않는다. onSale로 구분만 해서 넘긴다.
+  const saleVariants = inStock.filter((v) => {
     const price = parseFloat(v.price);
     const compareAt = parseFloat(v.compare_at_price);
-    return compareAt > 0 && price > 0 && compareAt > price;
+    return compareAt > 0 && compareAt > price;
   });
-  if (!onSale.length) return null;
+  const onSale = saleVariants.length > 0;
+  const priceBasis = onSale ? saleVariants : inStock;
 
-  const salePrice = Math.min(...onSale.map((v) => parseFloat(v.price)));
-  const listPrice = Math.max(...onSale.map((v) => parseFloat(v.compare_at_price)));
-  const inStock = onSale.filter((v) => v.available);
-  if (!inStock.length) return null;
+  const salePrice = Math.min(...priceBasis.map((v) => parseFloat(v.price)));
+  const listPrice = onSale ? Math.max(...saleVariants.map((v) => parseFloat(v.compare_at_price))) : salePrice;
 
   const sizeIdx = extractSizeOptionIndex(product);
   const sizeKey = sizeIdx === 0 ? "option1" : sizeIdx === 1 ? "option2" : sizeIdx === 2 ? "option3" : null;
@@ -112,7 +116,8 @@ function normalizeProduct(product, site) {
     imageUrls: Array.isArray(product.images) ? product.images.slice(0, 8).map((img) => img.src) : [],
     sourceShop: site.brand, // 구입처(사이트) 이름 — brand(실제 제조사)와 다를 수 있다
     sourceUrl: `https://${site.domain}/products/${product.handle}`,
-    offRate: Math.round((1 - salePrice / listPrice) * 100),
+    onSale,
+    offRate: onSale ? Math.round((1 - salePrice / listPrice) * 100) : 0,
   };
 }
 
@@ -139,11 +144,9 @@ async function scanSite(site, cfg, mode) {
   const base = `https://${site.domain}`;
   const products = await fetchAllProducts(base);
 
-  const items = products
+  const withCost = products
     .map((p) => normalizeProduct(p, site))
     .filter(Boolean)
-    .sort((a, b) => b.offRate - a.offRate)
-    .slice(0, MAX_ITEMS_PER_SITE)
     .map((item) => {
       const cost = landedCost(
         cfg,
@@ -159,7 +162,14 @@ async function scanSite(site, cfg, mode) {
       return { ...item, cost };
     });
 
-  return items;
+  // 세일 상품은 할인율 높은 순, 정가 상품은 원가(원화) 낮은 순으로 각각 상위 N개만 남긴다.
+  // 세일이 아니어도 환율·기본가 자체가 싼 상품은 상품탭에서 찾을 수 있어야 하기 때문이다.
+  const onSaleItems = withCost.filter((it) => it.onSale).sort((a, b) => b.offRate - a.offRate);
+  const regularItems = withCost.filter((it) => !it.onSale).sort((a, b) => a.cost.totalKrw - b.cost.totalKrw);
+  const saleSlots = Math.ceil(MAX_ITEMS_PER_SITE * 0.7);
+  const regularSlots = MAX_ITEMS_PER_SITE - saleSlots;
+
+  return [...onSaleItems.slice(0, saleSlots), ...regularItems.slice(0, regularSlots)];
 }
 
 module.exports = async function handler(req, res) {
@@ -195,8 +205,9 @@ module.exports = async function handler(req, res) {
 
   items.sort((a, b) => b.offRate - a.offRate);
 
+  // "Sale중" 탭 요약은 실제로 세일 중인 상품만 센다 — 정가 상품이 섞이면 세일 집계가 왜곡된다.
   const brandSummary = {};
-  items.forEach((it) => {
+  items.filter((it) => it.onSale).forEach((it) => {
     brandSummary[it.brand] = (brandSummary[it.brand] || 0) + 1;
   });
 

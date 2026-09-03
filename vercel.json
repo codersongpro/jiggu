@@ -4,6 +4,9 @@
     "api/scan.js": {
       "maxDuration": 60,
       "includeFiles": "config/**"
+    },
+    "api/korea-price.js": {
+      "maxDuration": 15
     }
   }
 }

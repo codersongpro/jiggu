@@ -140,6 +140,7 @@ main{padding:0 0 24px}
 .was{font-size:12.5px;color:var(--muted);text-decoration:line-through}
 .now-p{font-size:15px;font-weight:700}
 .off{font-size:12px;font-weight:700;color:var(--mark)}
+.off.calm{color:var(--muted);font-weight:500}
 .krw{font-size:12.5px;color:var(--muted);margin-top:4px}
 .krw b{color:var(--ink);font-weight:600}
 
@@ -202,6 +203,11 @@ table.cost tr.free td{color:var(--rise)}
   font-size:13px;padding:6px 12px;border:1px solid var(--line);border-radius:999px;color:var(--ink);
 }
 .brandSuggest button:active{background:var(--wash)}
+.dropRow{display:flex;gap:6px;margin-top:9px}
+.dropRow select{
+  flex:1;min-width:0;background:var(--wash);color:var(--ink);
+  border:1px solid var(--line);padding:8px 4px;font:inherit;font-size:12px;
+}
 
 .reshead{
   display:flex;align-items:baseline;gap:8px;
@@ -311,7 +317,7 @@ nav button.on .dot{opacity:1}
 </header>
 
 <nav>
-  <button class="on" data-view="v-signal"><span class="dot"></span>신호</button>
+  <button class="on" data-view="v-signal"><span class="dot"></span>Sale중</button>
   <button data-view="v-items"><span class="dot"></span>상품</button>
   <button data-view="v-config"><span class="dot"></span>설정</button>
 </nav>
@@ -336,6 +342,11 @@ nav button.on .dot{opacity:1}
         <button class="clr" id="qClear" aria-label="지우기">×</button>
       </div>
       <div class="brandSuggest" id="brandSuggest"></div>
+      <div class="dropRow">
+        <select id="fBrandSel"><option value="">브랜드 전체</option></select>
+        <select id="fTypeSel"><option value="">종류 전체</option></select>
+        <select id="fPriceSel"><option value="">가격대 전체</option></select>
+      </div>
       <div class="parsed" id="parsed"></div>
       <p class="hint" id="hint">비워두면 오늘 올릴 만한 상품을 알아서 골라줍니다.</p>
     </div>
@@ -375,7 +386,7 @@ nav button.on .dot{opacity:1}
     </div>
     <div class="sect">
       <h3>연결 상태</h3>
-      <p class="note">'신호' 탭의 스캔 버튼을 누르면 <code>/api/scan</code>이 config/targets.json에 등록된
+      <p class="note">'Sale중' 탭의 스캔 버튼을 누르면 <code>/api/scan</code>이 config/targets.json에 등록된
       브랜드몰들을 실시간으로 조회합니다. 상품명은 영문 원문 그대로 표시되니 게시글 작성 시 다듬어 쓰세요.
       전일 대비 세일 변화(신호)는 스캔 기록이 쌓여야 표시할 수 있어 이번 버전에서는 제공하지 않습니다.</p>
     </div>
@@ -392,6 +403,10 @@ nav button.on .dot{opacity:1}
     <h3>원가 계산</h3>
     <table class="cost" id="shCost"></table>
     <p class="note" id="shNote"></p>
+  </div>
+  <div class="sect">
+    <h3>국내 시세 비교 <span class="conf">참고용 · 자동 매칭</span></h3>
+    <div id="shKorea"><p class="note">불러오는 중…</p></div>
   </div>
   <div class="sect">
     <h3>구입처 <span id="shConf"></span></h3>
@@ -552,7 +567,7 @@ function buildPost(it){
 
 ▪ 브랜드 : ${kb}
 ▪ 상품명 : ${it.kr}
-▪ 현지가 : ${cur(it.list, it.cur)} → ${cur(it.sale, it.cur)} (${off(it)}% 할인)
+▪ 현지가 : ${it.onSale ? `${cur(it.list, it.cur)} → ${cur(it.sale, it.cur)} (${off(it)}% 할인)` : `${cur(it.sale, it.cur)} (정가)`}
 
 ✅ 가격 ${Math.round(sell)}
 
@@ -766,7 +781,7 @@ function scoreItem(it){
     sc += SIGNAL_BONUS[sig.kind]; why.push(sig.kind);
   }
   if(d >= 40){ sc += 8; }
-  why.push(d + '% 할인');
+  why.push(it.onSale ? d + '% 할인' : '정가 · 저렴');
   if(c.free){ sc += 8; why.push('면세'); }
   return {score:sc, why:why.join(' · ')};
 }
@@ -778,7 +793,20 @@ function renderItems(resetPage = true){
   if(resetPage) itemPage = 1;
   $('#brandSuggest').classList.remove('on'); $('#brandSuggest').innerHTML = '';
   const f = parseQuery(query);
-  const auto = !query.trim();
+
+  // 드롭다운은 검색어 파싱 결과 위에 덮어쓴다 — 텍스트 검색과 드롭다운을 함께 써도 된다
+  const dropBrand = $('#fBrandSel').value;
+  const dropType = $('#fTypeSel').value;
+  const dropPriceIdx = $('#fPriceSel').value;
+  if(dropBrand) f.brand = dropBrand;
+  if(dropType) f.type = dropType;
+  if(dropPriceIdx !== ''){
+    const band = PRICE_BANDS[+dropPriceIdx];
+    f.min = band.min || null;
+    f.max = band.max;
+  }
+  const dropdownActive = !!(dropBrand || dropType || dropPriceIdx !== '');
+  const auto = !query.trim() && !dropdownActive;
 
   // 인식한 조건을 보여준다
   const chips = [];
@@ -810,7 +838,7 @@ function renderItems(resetPage = true){
 
   if(!list.length){
     $('#itemList').innerHTML = !lastScanMeta
-      ? `<p class="empty">아직 스캔하지 않았습니다.<br>상단 '신호' 탭에서 스캔 버튼을 눌러주세요.</p>`
+      ? `<p class="empty">아직 스캔하지 않았습니다.<br>상단 'Sale중' 탭에서 스캔 버튼을 눌러주세요.</p>`
       : `<p class="empty">조건에 맞는 상품이 없습니다.<br>가격을 넓히거나 브랜드만 넣어보세요.</p>`;
     return;
   }
@@ -826,9 +854,9 @@ function renderItems(resetPage = true){
       <div class="pinfo">
         <div class="pname">${BRAND_KR[it.brand] || it.brand} ${it.kr}</div>
         <div class="pprice">
-          <span class="was num">${cur(it.list, it.cur)}</span>
+          ${it.onSale ? `<span class="was num">${cur(it.list, it.cur)}</span>` : ''}
           <span class="now-p num">${cur(it.sale, it.cur)}</span>
-          <span class="off num">${off(it)}%</span>
+          ${it.onSale ? `<span class="off num">${off(it)}%</span>` : `<span class="off num calm">정가</span>`}
         </div>
         <div class="krw">${bestSource(it).shop} · 원가 <b class="num">${won(c.total)}원</b></div>
         ${auto ? `<div class="why">${why}</div>` : ''}
@@ -863,6 +891,27 @@ function chosungOf(str){
   return out;
 }
 const ALL_BRANDS_KR = [...new Set(Object.values(BRAND_KR))].sort((a, b) => a.localeCompare(b, 'ko'));
+
+/* ---------- 드롭다운 필터(브랜드/종류/가격대) ---------- */
+const BRAND_ENTRIES_SORTED = Object.entries(BRAND_KR).sort((a, b) => a[1].localeCompare(b[1], 'ko'));
+const PRICE_BANDS = [
+  {label:'10만원 이하', min:0, max:100000},
+  {label:'10~20만원', min:100000, max:200000},
+  {label:'20~30만원', min:200000, max:300000},
+  {label:'30~50만원', min:300000, max:500000},
+  {label:'50만원 이상', min:500000, max:null},
+];
+function populateDropdownFilters(){
+  $('#fBrandSel').innerHTML = '<option value="">브랜드 전체</option>' +
+    BRAND_ENTRIES_SORTED.map(([key, kr]) => `<option value="${key}">${kr}</option>`).join('');
+  $('#fTypeSel').innerHTML = '<option value="">종류 전체</option>' +
+    TYPES.map(t => `<option value="${t.key}">${t.key}</option>`).join('');
+  $('#fPriceSel').innerHTML = '<option value="">가격대 전체</option>' +
+    PRICE_BANDS.map((b, i) => `<option value="${i}">${b.label}</option>`).join('');
+}
+['fBrandSel', 'fTypeSel', 'fPriceSel'].forEach(id => {
+  document.addEventListener('change', e => { if(e.target.id === id) renderItems(); });
+});
 
 function matchBrandSuggest(q){
   if(!q) return [];
@@ -927,12 +976,49 @@ function openSheet(it){
 
   // 이미지 — 실제 배포판에서는 수집한 원본 URL이 들어간다
   renderImgs(it);
+  loadKoreaPrice(it, c.total);
 
   const p = buildPost(it);
   $('#postTitle').value = p.title;
   $('#postBody').value = p.body;
   $('#sheet').classList.add('on');
   $('#sheetBg').classList.add('on');
+}
+
+/* ---------- 국내 시세 비교 ----------
+   상품 하나를 열 때만 온디맨드로 조회한다(스캔 전체에 대해 하면 서버리스 타임아웃).
+   브랜드+영문 상품명 키워드 검색이라 정확도가 낮다 — 참고용으로만 쓴다. */
+async function loadKoreaPrice(it, landedTotal){
+  const el = $('#shKorea');
+  el.innerHTML = '<p class="note">불러오는 중…</p>';
+  const kb = BRAND_KR[it.brand] || it.brand;
+  const q = `${kb} ${it.name}`;
+  try{
+    const res = await fetch(`/api/korea-price?q=${encodeURIComponent(q)}&landedKrw=${Math.round(landedTotal)}`);
+    const data = await res.json();
+    if(curItem !== it) return; // 응답 오는 사이 다른 상품을 열었으면 무시
+    if(!data.available){
+      el.innerHTML = `<p class="note">${data.reason || '국내 시세를 가져오지 못했습니다.'}</p>`;
+      return;
+    }
+    if(!data.results.length){
+      el.innerHTML = `<p class="note">'${q}'로 검색된 국내 상품이 없습니다.</p>`;
+      return;
+    }
+    const diff = data.diffKrw;
+    const diffLine = diff == null ? '' : diff < 0
+      ? `<p class="note" style="color:var(--rise)">해외가 국내 최저가보다 ${won(Math.abs(diff))}원 저렴합니다.</p>`
+      : `<p class="note" style="color:var(--mark)">국내 최저가가 ${won(diff)}원 더 저렴합니다.</p>`;
+    el.innerHTML = diffLine + data.results.slice(0, 3).map(r => `
+      <div class="src">
+        <a class="shop" href="${r.link}" target="_blank" rel="noopener">${r.mallName} · ${r.title.slice(0, 28)}</a>
+        <span class="sp">${won(r.priceKrw)}원</span>
+      </div>`).join('') +
+      `<p class="note">검색어: "${q}" — 키워드 자동 검색이라 다른 색상·모델이 섞일 수 있습니다. 링크를 눌러 직접 확인하세요.</p>`;
+  }catch(e){
+    if(curItem !== it) return;
+    el.innerHTML = '<p class="note">국내 시세 조회 실패</p>';
+  }
 }
 /* ---------- 이미지 ----------
    it.imgs는 스캔으로 수집한 원본 이미지 URL 배열이다. */
@@ -1143,14 +1229,16 @@ function mapApiItem(apiItem){
     sizes: apiItem.sizes || '',
     color: apiItem.color || '',
     imgs: apiItem.imageUrls || [],
+    onSale: !!apiItem.onSale,   // 세일 아니어도(환율·기본가가 싸서) 상품탭엔 뜬다
     match: 'single', // 이번 버전은 사이트 하나만 조회한다 — 여러 몰 교차 매칭(PRD 6장)은 다음 단계
     sources: [{shop: apiItem.sourceShop, price: apiItem.salePrice, url: apiItem.sourceUrl}]
   };
 }
 
+// "Sale중" 탭은 실제 세일 상품만 집계한다 — 정가 상품이 섞이면 세일 감지 숫자가 왜곡된다.
 function buildSignals(items){
   const map = {};
-  items.forEach(it => {
+  items.filter(it => it.onSale).forEach(it => {
     if(!map[it.brand]) map[it.brand] = {brand: it.brand, count: 0, maxOff: 0};
     map[it.brand].count++;
     map[it.brand].maxOff = Math.max(map[it.brand].maxOff, off(it));
@@ -1198,6 +1286,7 @@ async function runScan(){
 $('#scanBtn').onclick = runScan;
 
 loadCfg();
+populateDropdownFilters();
 renderSignals();
 renderItems();
 </script>
