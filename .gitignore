@@ -10,3 +10,5 @@ output/*.xlsx
 .DS_Store
 node_modules/
 .vercel/
+scripts/local-crawler/output/
+scripts/feed-import/output/

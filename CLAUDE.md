@@ -171,11 +171,12 @@ Self-Portrait 등)는 아직 스캔 결과가 확인되지 않았다 — 다음 
 - [ ] 텔레그램 알림
 - [x] Shopify가 아닌 사이트(REI 등) → `scripts/local-crawler/` 추가. PC에서 Playwright로 열어
       JSON-LD(schema.org)를 읽고, 설정 탭에서 결과 JSON을 가져와 상품탭에 합친다
-- [ ] 봇 차단이 걸린 사이트(코치·마이클코어스·케이트스페이드·랄프로렌·Nordstrom·SSENSE·Farfetch
-      ·Mercari·ZOZOTOWN 등) — **우회하지 않는다.** TLS 지문 위장·Stealth 플러그인·주거용 프록시·
-      캡차 자동 풀이는 이 프로젝트에서 만들지 않는다. 이 브랜드들의 가격 데이터가 필요하면
-      어필리에이트 네트워크(Rakuten Advertising, CJ Affiliate, Awin, Impact)의 **공식 상품 피드**를
-      받는 게 정공법이다 — 정가·할인가·SKU·재고가 정리돼 있어 품질도 스크래핑보다 낫다
+- [x] 봇 차단이 걸린 사이트(코치·마이클코어스·케이트스페이드·랄프로렌 등) → **우회하지 않고**
+      어필리에이트 공식 상품 피드로 간다. `scripts/feed-import/`가 CJ·Rakuten·Awin·Impact·
+      Google Shopping 형식의 CSV/TSV/XML 피드를 읽어 앱 스키마로 변환한다.
+      TLS 지문 위장·Stealth 플러그인·주거용 프록시·캡차 자동 풀이는 만들지 않는다
+- [ ] 피드 자동 갱신 — 지금은 대시보드에서 파일을 받아 수동 변환한다. 네트워크 API 키를 받으면
+      매일 자동으로 받아오게 만들 수 있다 (키는 반드시 환경변수로)
 - [ ] 일본은 라쿠텐 공식 API 연동이 정공법(별도 구현 필요)
 - [ ] 상품명 한글 번역 (지금은 영문 원문 그대로 표시)
 
