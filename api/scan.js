@@ -195,10 +195,11 @@ module.exports = async function handler(req, res) {
   let uncapped = false;
 
   if (brandFilter) {
-    // "확인" 버튼으로 특정 브랜드를 지정한 경우 — 그 브랜드 공식몰만 캡 없이 전부 훑는다.
-    // 공식몰이 없는 브랜드(멀티브랜드 편집숍에서만 vendor로 등장하는 경우)는 편집숍들만 시도한다.
-    const matched = sites.filter((s) => s.brand.toLowerCase() === brandFilter.toLowerCase());
-    sites = matched.length ? matched : (targets.sites_multi_brand || []).filter((s) => s.platform === "shopify");
+    // "확인" 버튼으로 특정 브랜드를 지정한 경우 — 그 브랜드가 나올 수 있는 사이트를
+    // 전부 훑어서 합친다: ① 공식몰(지역별로 여러 개일 수 있다 — 예: Sandro/Sandro EU)
+    // ② 멀티브랜드 편집숍(vendor로 이 브랜드가 섞여 있을 수 있다). 한 곳만 보면
+    // 그 사이트가 막혀 있을 때 아예 결과가 안 나오니, 여러 사이트에서 모아 교차 확인한다.
+    sites = [...sites, ...(targets.sites_multi_brand || []).filter((s) => s.platform === "shopify")];
     uncapped = true;
   } else if (onlyPopular) {
     // "Sale중" 탭 전용 — 대중적으로 잘 알려진 브랜드만 스캔해서 세일 신호의 노이즈를 줄인다.
@@ -209,7 +210,7 @@ module.exports = async function handler(req, res) {
     sites.map((site) => scanSite(site, cfg, mode, uncapped))
   );
 
-  const items = [];
+  let items = [];
   const errors = [];
   results.forEach((r, i) => {
     const site = sites[i];
@@ -219,6 +220,17 @@ module.exports = async function handler(req, res) {
       errors.push({ brand: site.brand, domain: site.domain, error: String(r.reason && r.reason.message || r.reason) });
     }
   });
+
+  if (brandFilter) {
+    // 여러 사이트를 합쳐서 긁어왔으니, 실제 상품 브랜드(vendor 우선 판별된 값)가
+    // 지정한 브랜드와 일치하는 것만 남긴다. "Sandro EU"처럼 지역 접미사가 붙은
+    // 사이트명도 잡히도록 접두어 일치까지 허용한다.
+    const bf = brandFilter.toLowerCase();
+    items = items.filter((it) => {
+      const b = it.brand.toLowerCase();
+      return b === bf || b.startsWith(bf + " ");
+    });
+  }
 
   items.sort((a, b) => b.offRate - a.offRate);
 

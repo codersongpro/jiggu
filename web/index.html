@@ -799,6 +799,20 @@ function scoreItem(it){
 let itemPage = 1;
 const PAGE_SIZE = 20;
 
+// 조회했는데 0건일 때, "상품이 없다"와 "사이트 연결에 실패했다"를 구분해서 보여준다.
+// 후자를 그냥 "없습니다"로 뭉개면 사용자가 원인을 알 방법이 없다.
+function buildEmptyItemsMessage(){
+  if(!lastProductScanMeta){
+    return `<p class="empty">아직 조회하지 않았습니다.<br>브랜드를 고르고 '확인'을 눌러주세요.</p>`;
+  }
+  const m = lastProductScanMeta;
+  if(m.itemCount === 0 && m.errors && m.errors.length){
+    const lines = m.errors.slice(0, 3).map(e => `${e.brand}: ${e.error}`).join('<br>');
+    return `<p class="empty">사이트에 연결하지 못했습니다.<br><span style="font-size:12px">${lines}</span></p>`;
+  }
+  return `<p class="empty">조건에 맞는 상품이 없습니다.<br>가격을 넓히거나 브랜드만 넣어보세요.</p>`;
+}
+
 function renderItems(resetPage = true){
   if(resetPage) itemPage = 1;
   $('#brandSuggest').classList.remove('on'); $('#brandSuggest').innerHTML = '';
@@ -851,9 +865,7 @@ function renderItems(resetPage = true){
   $('#resCount').textContent = list.length ? list.length + '건' : '';
 
   if(!list.length){
-    $('#itemList').innerHTML = !lastProductScanMeta
-      ? `<p class="empty">아직 조회하지 않았습니다.<br>브랜드를 고르고 '확인'을 눌러주세요.</p>`
-      : `<p class="empty">조건에 맞는 상품이 없습니다.<br>가격을 넓히거나 브랜드만 넣어보세요.</p>`;
+    $('#itemList').innerHTML = buildEmptyItemsMessage();
     return;
   }
 
