@@ -329,6 +329,8 @@ nav button.on .dot{opacity:1}
     <div class="summary">
       <div class="big num" id="sigCount">4<small>개 브랜드에서 세일 감지</small></div>
       <p id="sigSub">라코스테는 12시간 전만 해도 세일 상품이 8%였습니다.</p>
+      <button class="btn" id="sigErrToggle" style="display:none;width:auto;padding:6px 14px;font-size:12px;margin-top:8px"></button>
+      <div id="sigErrList" style="display:none;margin-top:8px"></div>
     </div>
     <ul class="rows" id="signalList"></ul>
   </section>
@@ -361,6 +363,8 @@ nav button.on .dot{opacity:1}
     <div class="filterbar" id="filterBar"></div>
     <div class="reshead"><h2 id="resTitle"></h2><span id="resCount"></span></div>
     <p class="note" id="siteStatus" style="padding:0 18px 10px"></p>
+    <button class="btn" id="prodErrToggle" style="display:none;margin:0 18px 10px;width:calc(100% - 36px)"></button>
+    <div id="prodErrList" style="display:none;padding:0 18px 10px"></div>
     <div id="itemList"></div>
   </section>
 
@@ -609,9 +613,36 @@ function buildPost(it){
    ============================================================ */
 const $ = s => document.querySelector(s);
 
+/* 스캔 실패 사이트 목록 — 접혀 있다가 버튼을 누르면 전체가 펼쳐진다.
+   toggleSel/listSel: 버튼과 목록 엘리먼트 셀렉터. meta: {errors:[{brand,domain,error}]} */
+function renderErrorToggle(meta, toggleSel, listSel){
+  const toggle = $(toggleSel), list = $(listSel);
+  const errs = meta && meta.errors ? meta.errors : [];
+  if(!errs.length){
+    toggle.style.display = 'none';
+    list.style.display = 'none';
+    list.innerHTML = '';
+    return;
+  }
+  toggle.style.display = 'block';
+  toggle.textContent = `실패 목록 보기 (${errs.length}곳)`;
+  list.style.display = 'none';
+  list.innerHTML = errs.map(e => `
+    <div class="src">
+      <span class="shop">${BRAND_KR[e.brand] || e.brand} <span style="color:var(--muted);font-weight:400">(${e.domain})</span></span>
+      <span class="sp" style="font-size:12px;color:var(--muted)">${e.error}</span>
+    </div>`).join('');
+  toggle.onclick = () => {
+    const open = list.style.display !== 'none';
+    list.style.display = open ? 'none' : 'block';
+    toggle.textContent = open ? `실패 목록 보기 (${errs.length}곳)` : '실패 목록 접기';
+  };
+}
+
 /* 온디맨드 스캔이라 "어제 대비" 데이터가 없다. 스캔 기록을 서버에 쌓기 전까지는
    이번 스캔에서 감지된 브랜드별 세일 상품 수 랭킹으로 대신한다. */
 function renderSignals(){
+  renderErrorToggle(lastSignalScanMeta, '#sigErrToggle', '#sigErrList');
   if(!lastSignalScanMeta){
     $('#sigCount').innerHTML = `0<small>개 브랜드에서 세일 감지</small>`;
     $('#sigSub').textContent = '상단의 스캔 버튼을 눌러 지금 세일 중인 상품을 가져오세요.';
@@ -827,6 +858,7 @@ function buildEmptyItemsMessage(){
 function renderItems(resetPage = true){
   if(resetPage) itemPage = 1;
   $('#brandSuggest').classList.remove('on'); $('#brandSuggest').innerHTML = '';
+  renderErrorToggle(lastProductScanMeta, '#prodErrToggle', '#prodErrList');
   const f = parseQuery(query);
 
   // 드롭다운은 검색어 파싱 결과 위에 덮어쓴다 — 텍스트 검색과 드롭다운을 함께 써도 된다
