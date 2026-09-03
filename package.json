@@ -1,0 +1,9 @@
+{
+  "name": "sourcing-crawler",
+  "version": "1.0.0",
+  "private": true,
+  "description": "해외의류 소싱 크롤러 - 핫딜 레이더",
+  "dependencies": {
+    "js-yaml": "^4.1.0"
+  }
+}

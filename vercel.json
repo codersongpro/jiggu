@@ -1,0 +1,9 @@
+{
+  "outputDirectory": "web",
+  "functions": {
+    "api/scan.js": {
+      "maxDuration": 30,
+      "includeFiles": "config/**"
+    }
+  }
+}

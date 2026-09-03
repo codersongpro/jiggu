@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env
+*.db
+*.sqlite3
+data/
+output/*.xlsx
+.DS_Store
+node_modules/
+.vercel/
