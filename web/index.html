@@ -360,6 +360,7 @@ nav button.on .dot{opacity:1}
     </div>
     <div class="filterbar" id="filterBar"></div>
     <div class="reshead"><h2 id="resTitle"></h2><span id="resCount"></span></div>
+    <p class="note" id="siteStatus" style="padding:0 18px 10px"></p>
     <div id="itemList"></div>
   </section>
 
@@ -491,13 +492,17 @@ const BRAND_KR = {
   'Coach Outlet':'코치 아울렛', 'Kate Spade Outlet':'케이트스페이드 아울렛',
   'Bandier':'밴디어', 'Verishop':'베리샵', 'The Webster':'더웹스터', 'Kirna Zabete':'키르나자베트',
   'Aritzia':'아리치아', 'Anine Bing':'아닌빙', 'Stussy':'스투시', 'Staud':'스토드',
-  'Self-Portrait':'셀프포트레이트', 'Sezane':'세잔느', 'Rouje':'루쥬'
+  'Self-Portrait':'셀프포트레이트', 'Sezane':'세잔느', 'Rouje':'루쥬',
+  'Bombas':'봄바스', 'MeUndies':'미언디스', 'Stance':'스탠스', 'Cotopaxi':'코토팍시',
+  'Vuori':'부오리', 'Chubbies':'처비스', 'Untuckit':'언턱잇', 'ThirdLove':'써드러브',
+  'Taylor Stitch':'테일러스티치', 'Rowing Blazers':'로잉블레이저스', 'Birdies':'버디스'
 };
 
 /* ============================================================
    스캔 데이터 — /api/scan 을 호출해 채운다. 초기값은 빈 배열.
    ============================================================ */
 let SIGNALS = [];
+let SIGNAL_ITEMS = []; // Sale중 스캔의 실제 상품들 — 브랜드 행 클릭시 재조회 없이 여기서 꺼내 보여준다
 let ITEMS = [];
 // Sale중 탭과 상품탭은 완전히 다른 스캔으로 동작한다(서로의 상태를 덮어쓰지 않음).
 let lastSignalScanMeta = null; // Sale중 탭 — 인기 브랜드만 스캔
@@ -640,8 +645,14 @@ function renderSignals(){
 
   document.querySelectorAll('.row').forEach(r => {
     r.onclick = () => {
-      query = BRAND_KR[r.dataset.brand] || r.dataset.brand;
+      // 재조회 없이 방금 찾은 세일 상품을 그대로 상품탭에 옮겨서 보여준다.
+      const brand = r.dataset.brand;
+      const brandItems = SIGNAL_ITEMS.filter(it => it.brand === brand);
+      ITEMS = ITEMS.filter(it => it.brand !== brand).concat(brandItems);
+      if(!lastProductScanMeta) lastProductScanMeta = lastSignalScanMeta;
+      query = BRAND_KR[brand] || brand;
       $('#q').value = query;
+      $('#fBrandSel').value = brand;
       go('v-items'); renderItems();
     };
   });
@@ -863,6 +874,11 @@ function renderItems(resetPage = true){
 
   $('#resTitle').textContent = auto ? '오늘의 추천' : '검색 결과';
   $('#resCount').textContent = list.length ? list.length + '건' : '';
+  $('#siteStatus').textContent = lastProductScanMeta
+    ? (lastProductScanMeta.sitesFailed
+        ? `사이트 ${lastProductScanMeta.sitesOk}/${lastProductScanMeta.sitesTotal}곳 확인됨 · ${lastProductScanMeta.sitesFailed}곳은 연결 실패해서 이 목록에 없음`
+        : `사이트 ${lastProductScanMeta.sitesOk}곳 모두 확인됨`)
+    : '';
 
   if(!list.length){
     $('#itemList').innerHTML = buildEmptyItemsMessage();
@@ -1300,8 +1316,8 @@ async function runScan(){
     if(!res.ok) throw new Error('서버 오류 (HTTP ' + res.status + ')');
     const data = await res.json();
 
-    const signalItems = toItems(data.items);
-    SIGNALS = buildSignals(signalItems);
+    SIGNAL_ITEMS = toItems(data.items);
+    SIGNALS = buildSignals(SIGNAL_ITEMS);
     lastSignalScanMeta = data;
     applyFxRates(data.fxRates);
 

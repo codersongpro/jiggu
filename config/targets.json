@@ -667,6 +667,116 @@
       "platform": "shopify",
       "verified": "unconfirmed",
       "popular": true
+    },
+    {
+      "brand": "Bombas",
+      "brand_kr": "봄바스",
+      "domain": "www.bombas.com",
+      "region": "US",
+      "currency": "USD",
+      "category": "accessory",
+      "platform": "shopify",
+      "verified": "confirmed"
+    },
+    {
+      "brand": "MeUndies",
+      "brand_kr": "미언디스",
+      "domain": "www.meundies.com",
+      "region": "US",
+      "currency": "USD",
+      "category": "apparel",
+      "platform": "shopify",
+      "verified": "confirmed"
+    },
+    {
+      "brand": "Stance",
+      "brand_kr": "스탠스",
+      "domain": "www.stance.com",
+      "region": "US",
+      "currency": "USD",
+      "category": "accessory",
+      "platform": "shopify",
+      "verified": "unconfirmed"
+    },
+    {
+      "brand": "Cotopaxi",
+      "brand_kr": "코토팍시",
+      "domain": "www.cotopaxi.com",
+      "region": "US",
+      "currency": "USD",
+      "category": "bag",
+      "platform": "shopify",
+      "verified": "unconfirmed"
+    },
+    {
+      "brand": "Vuori",
+      "brand_kr": "부오리",
+      "domain": "www.vuoriclothing.com",
+      "region": "US",
+      "currency": "USD",
+      "category": "apparel",
+      "platform": "shopify",
+      "verified": "unconfirmed"
+    },
+    {
+      "brand": "Chubbies",
+      "brand_kr": "처비스",
+      "domain": "www.chubbiesshorts.com",
+      "region": "US",
+      "currency": "USD",
+      "category": "apparel",
+      "platform": "shopify",
+      "verified": "unconfirmed"
+    },
+    {
+      "brand": "Untuckit",
+      "brand_kr": "언턱잇",
+      "domain": "www.untuckit.com",
+      "region": "US",
+      "currency": "USD",
+      "category": "apparel",
+      "platform": "shopify",
+      "verified": "unconfirmed"
+    },
+    {
+      "brand": "ThirdLove",
+      "brand_kr": "써드러브",
+      "domain": "www.thirdlove.com",
+      "region": "US",
+      "currency": "USD",
+      "category": "apparel",
+      "platform": "shopify",
+      "verified": "unconfirmed"
+    },
+    {
+      "brand": "Taylor Stitch",
+      "brand_kr": "테일러스티치",
+      "domain": "www.taylorstitch.com",
+      "region": "US",
+      "currency": "USD",
+      "category": "apparel",
+      "platform": "shopify",
+      "verified": "unconfirmed"
+    },
+    {
+      "brand": "Rowing Blazers",
+      "brand_kr": "로잉블레이저스",
+      "domain": "www.rowingblazers.com",
+      "region": "US",
+      "currency": "USD",
+      "category": "apparel",
+      "platform": "shopify",
+      "verified": "unconfirmed"
+    },
+    {
+      "brand": "Birdies",
+      "brand_kr": "버디스",
+      "domain": "www.shopbirdies.com",
+      "region": "US",
+      "currency": "USD",
+      "category": "shoes",
+      "platform": "shopify",
+      "verified": "unconfirmed"
     }
   ],
   "_multi_brand_readme": "아래 sites_multi_brand는 여러 브랜드를 한 사이트에서 파는 편집숍이다. 'brand' 필드는 구입처(사이트) 이름일 뿐, 실제 상품 브랜드는 api/scan.js가 Shopify 응답의 vendor 필드에서 자동으로 읽는다 — 그래서 이 목록에 없는 브랜드가 갑자기 세일해도 브랜드를 미리 등록할 필요 없이 잡힌다. category도 상품 제목/product_type을 보고 자동 보정한다.",

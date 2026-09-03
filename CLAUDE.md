@@ -115,7 +115,7 @@ SQLite 저장은 이번 1차 범위 밖이다 — 아래 "미완성" 참고.
 - `core/landed_cost.py` — 원가·마진 계산 엔진(Python, 참고/검증용). 실행 검증 완료
 - `api/_lib/landedCost.js` — 위 로직의 Node 포팅. Python과 1원 단위까지 결과 일치 검증
 - `config/cost.yaml` — 관세·환율·배대지·수수료 설정
-- `config/targets.json` — 스캔 대상 (브랜드 공식몰 60여 곳 + 멀티브랜드 편집숍, 미국+유럽).
+- `config/targets.json` — 스캔 대상 (브랜드 공식몰 70여 곳 + 멀티브랜드 편집숍, 미국+유럽).
   `verified` 필드로 Shopify 사용 확신도 표시. **이 세션은 외부망이 막혀 있어 실제 접속 검증을
   못했다 — 배포 후 스캔해서 `errors`에 뭐가 실패하는지 반드시 확인할 것**. 일본은 확신 가능한
   Shopify 후보가 없어 보류(`_japan_note` 참고)
