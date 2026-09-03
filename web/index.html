@@ -398,6 +398,13 @@ nav button.on .dot{opacity:1}
       </div>
     </div>
     <div class="sect">
+      <h3>로컬 크롤링 결과 가져오기</h3>
+      <p class="note">Shopify가 아닌 사이트(REI 등)는 PC에서 <code>node scripts/local-crawler/crawl.js</code>를
+      돌려서 수집합니다. 만들어진 JSON 파일을 여기서 열면 상품 탭 목록에 합쳐집니다.</p>
+      <input type="file" id="importFile" accept="application/json" style="margin-top:10px">
+      <p class="note" id="importResult" style="display:none"></p>
+    </div>
+    <div class="sect">
       <h3>연결 상태</h3>
       <p class="note">'Sale중' 탭의 스캔 버튼을 누르면 <code>/api/scan</code>이 config/targets.json에 등록된
       브랜드몰들을 실시간으로 조회합니다. 상품명은 영문 원문 그대로 표시되니 게시글 작성 시 다듬어 쓰세요.
@@ -1337,6 +1344,31 @@ function toItems(apiItems){
   items.forEach(it => { it.sale = bestSource(it).price; it.type = detectType(it); });
   return items;
 }
+
+/* ---------- 로컬 크롤러 결과 가져오기 (설정 탭) ----------
+   scripts/local-crawler/crawl.js가 만든 JSON을 읽어 상품탭 목록에 합친다.
+   같은 사이트를 다시 크롤링해 가져오면 그 사이트 것만 교체된다. */
+$('#importFile').addEventListener('change', async (e) => {
+  const file = e.target.files && e.target.files[0];
+  const out = $('#importResult');
+  if(!file) return;
+  try{
+    const data = JSON.parse(await file.text());
+    const imported = toItems(data.items);
+    if(!imported.length) throw new Error('items가 비어 있습니다');
+    const shopOf = it => (it.sources[0] || {}).shop;
+    const shops = new Set(imported.map(shopOf));
+    ITEMS = ITEMS.filter(it => !shops.has(shopOf(it))).concat(imported);
+    renderItems();
+    out.style.display = 'block';
+    out.textContent = `${imported.length}건을 가져왔습니다. 상품 탭에서 확인하세요.`;
+  }catch(err){
+    out.style.display = 'block';
+    out.textContent = '가져오기 실패: ' + err.message;
+  }finally{
+    e.target.value = '';
+  }
+});
 
 /* ---------- Sale중 탭 전용 스캔 (헤더 스캔 버튼) ----------
    인기 브랜드만 조회한다. 상품탭(ITEMS)은 절대 건드리지 않는다 — 두 탭은 완전히 분리돼 있다. */

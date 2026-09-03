@@ -1,0 +1,128 @@
+{
+  "_readme": "Shopify products.json이 없는 사이트를 위한 로컬 브라우저 크롤러 설정. api/scan.js(서버리스, Shopify 전용)와는 완전히 별개이며, 사용자 PC에서 직접 실행한다.",
+  "_policy": "여기에는 봇 차단을 명시적으로 걸어둔 사이트(SSENSE·Farfetch·END·Saks·Nordstrom·Mercari·ZOZOTOWN 등)를 넣지 않는다. 그런 사이트를 뚫으려면 TLS 지문 위장·Stealth 플러그인·주거용 프록시 같은 우회 기술이 필요한데, 이 프로젝트는 그 방향으로 가지 않는다. 여기 있는 사이트들도 차단 응답(403/503/캡차)이 나오면 재시도하지 말고 목록에서 빼는 게 원칙이다.",
+  "_howto": "listingUrls에는 실제로 브라우저에서 열어본 세일/클리어런스 카테고리 페이지 URL을 넣는다. 지금 들어있는 값은 각 사이트 첫 화면이라 상품이 몇 개 안 잡힌다 — 세일 페이지 URL로 바꿔야 제 역할을 한다.",
+  "sites": [
+    {
+      "brand": "REI",
+      "domain": "www.rei.com",
+      "listingUrls": ["https://www.rei.com/rei-garage"],
+      "linkPattern": "^/product/\\d+/",
+      "currency": "USD",
+      "region": "US",
+      "defaultCategory": "apparel"
+    },
+    {
+      "brand": "Backcountry",
+      "domain": "www.backcountry.com",
+      "listingUrls": ["https://www.backcountry.com"],
+      "currency": "USD",
+      "region": "US",
+      "defaultCategory": "apparel"
+    },
+    {
+      "brand": "Sierra",
+      "domain": "www.sierra.com",
+      "listingUrls": ["https://www.sierra.com"],
+      "currency": "USD",
+      "region": "US",
+      "defaultCategory": "apparel"
+    },
+    {
+      "brand": "6pm",
+      "domain": "www.6pm.com",
+      "listingUrls": ["https://www.6pm.com"],
+      "currency": "USD",
+      "region": "US",
+      "defaultCategory": "shoes"
+    },
+    {
+      "brand": "J.Crew",
+      "domain": "www.jcrew.com",
+      "listingUrls": ["https://www.jcrew.com"],
+      "currency": "USD",
+      "region": "US",
+      "defaultCategory": "apparel"
+    },
+    {
+      "brand": "Shopbop",
+      "domain": "www.shopbop.com",
+      "listingUrls": ["https://www.shopbop.com"],
+      "currency": "USD",
+      "region": "US",
+      "defaultCategory": "apparel"
+    },
+    {
+      "brand": "Revolve",
+      "domain": "www.revolve.com",
+      "listingUrls": ["https://www.revolve.com"],
+      "currency": "USD",
+      "region": "US",
+      "defaultCategory": "apparel"
+    },
+    {
+      "brand": "The Outnet",
+      "domain": "www.theoutnet.com",
+      "listingUrls": ["https://www.theoutnet.com"],
+      "currency": "USD",
+      "region": "US",
+      "defaultCategory": "apparel"
+    },
+    {
+      "brand": "Mr Porter",
+      "domain": "www.mrporter.com",
+      "listingUrls": ["https://www.mrporter.com"],
+      "currency": "USD",
+      "region": "US",
+      "defaultCategory": "apparel"
+    },
+    {
+      "brand": "Net-a-Porter",
+      "domain": "www.net-a-porter.com",
+      "listingUrls": ["https://www.net-a-porter.com"],
+      "currency": "USD",
+      "region": "US",
+      "defaultCategory": "apparel"
+    },
+    {
+      "brand": "Mytheresa",
+      "domain": "www.mytheresa.com",
+      "listingUrls": ["https://www.mytheresa.com"],
+      "currency": "EUR",
+      "region": "EU",
+      "defaultCategory": "apparel"
+    },
+    {
+      "brand": "LuisaViaRoma",
+      "domain": "www.luisaviaroma.com",
+      "listingUrls": ["https://www.luisaviaroma.com"],
+      "currency": "EUR",
+      "region": "EU",
+      "defaultCategory": "apparel"
+    },
+    {
+      "brand": "United Arrows",
+      "domain": "store.united-arrows.co.jp",
+      "listingUrls": ["https://store.united-arrows.co.jp"],
+      "currency": "JPY",
+      "region": "JP",
+      "defaultCategory": "apparel"
+    },
+    {
+      "brand": "BEAMS",
+      "domain": "www.beams.co.jp",
+      "listingUrls": ["https://www.beams.co.jp"],
+      "currency": "JPY",
+      "region": "JP",
+      "defaultCategory": "apparel"
+    },
+    {
+      "brand": "Magaseek",
+      "domain": "www.magaseek.com",
+      "listingUrls": ["https://www.magaseek.com"],
+      "currency": "JPY",
+      "region": "JP",
+      "defaultCategory": "apparel"
+    }
+  ]
+}

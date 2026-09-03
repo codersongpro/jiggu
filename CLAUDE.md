@@ -169,10 +169,14 @@ Self-Portrait 등)는 아직 스캔 결과가 확인되지 않았다 — 다음 
 - [ ] 국내 시세 매칭 정확도 — 지금은 키워드 검색뿐. SKU/바코드 매칭으로 올리는 게 다음 단계
 - [ ] `output/excel.py`
 - [ ] 텔레그램 알림
-- [ ] 안티봇 있는 대형 종합몰(Nordstrom Rack, Saks OFF 5TH 등)·`verified: "blocked"` 처리된
-      코치·마이클코어스·케이트스페이드·랄프로렌 등 대형 브랜드·일본 사이트 — 브라우저 자동화가
-      필요해 Vercel 범위 밖. 로컬 도구(`byungjunjang/web-crawler` 등)로 별도 수집 후 업로드하는
-      구조를 추가하면 확장 가능. 일본은 라쿠텐 공식 API 연동이 정공법(별도 구현 필요)
+- [x] Shopify가 아닌 사이트(REI 등) → `scripts/local-crawler/` 추가. PC에서 Playwright로 열어
+      JSON-LD(schema.org)를 읽고, 설정 탭에서 결과 JSON을 가져와 상품탭에 합친다
+- [ ] 봇 차단이 걸린 사이트(코치·마이클코어스·케이트스페이드·랄프로렌·Nordstrom·SSENSE·Farfetch
+      ·Mercari·ZOZOTOWN 등) — **우회하지 않는다.** TLS 지문 위장·Stealth 플러그인·주거용 프록시·
+      캡차 자동 풀이는 이 프로젝트에서 만들지 않는다. 이 브랜드들의 가격 데이터가 필요하면
+      어필리에이트 네트워크(Rakuten Advertising, CJ Affiliate, Awin, Impact)의 **공식 상품 피드**를
+      받는 게 정공법이다 — 정가·할인가·SKU·재고가 정리돼 있어 품질도 스크래핑보다 낫다
+- [ ] 일본은 라쿠텐 공식 API 연동이 정공법(별도 구현 필요)
 - [ ] 상품명 한글 번역 (지금은 영문 원문 그대로 표시)
 
 ### 아직 결정 안 된 것 — 진행 전에 사용자에게 물어야 함
