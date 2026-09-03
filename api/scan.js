@@ -140,7 +140,7 @@ async function fetchAllProducts(base) {
   return all;
 }
 
-async function scanSite(site, cfg, mode) {
+async function scanSite(site, cfg, mode, uncapped) {
   const base = `https://${site.domain}`;
   const products = await fetchAllProducts(base);
 
@@ -162,18 +162,23 @@ async function scanSite(site, cfg, mode) {
       return { ...item, cost };
     });
 
-  // 세일 상품은 할인율 높은 순, 정가 상품은 원가(원화) 낮은 순으로 각각 상위 N개만 남긴다.
-  // 세일이 아니어도 환율·기본가 자체가 싼 상품은 상품탭에서 찾을 수 있어야 하기 때문이다.
   const onSaleItems = withCost.filter((it) => it.onSale).sort((a, b) => b.offRate - a.offRate);
   const regularItems = withCost.filter((it) => !it.onSale).sort((a, b) => a.cost.totalKrw - b.cost.totalKrw);
+
+  // 브랜드를 지정해 찾아온 경우(?brand=)는 캡 없이 그 사이트 전체를 돌려준다 —
+  // "이 브랜드에서 뭐가 있는지 전부 보고 싶다"는 요청이라 할인율/저가 우선순위로
+  // 걸러내면 안 된다. 지정 없는 일반 스캔은 응답 크기 때문에 사이트당 상위 N개만 남긴다.
+  if (uncapped) return [...onSaleItems, ...regularItems];
+
   const saleSlots = Math.ceil(MAX_ITEMS_PER_SITE * 0.7);
   const regularSlots = MAX_ITEMS_PER_SITE - saleSlots;
-
   return [...onSaleItems.slice(0, saleSlots), ...regularItems.slice(0, regularSlots)];
 }
 
 module.exports = async function handler(req, res) {
   const mode = req.query && (req.query.mode === "business" ? "business" : "proxy");
+  const brandFilter = req.query && req.query.brand ? String(req.query.brand).trim() : "";
+  const onlyPopular = req.query && req.query.onlyPopular === "1";
   const cfg = loadConfig();
 
   let fxSource = "cost.yaml 고정값";
@@ -186,10 +191,22 @@ module.exports = async function handler(req, res) {
   }
 
   const allSites = [...targets.sites, ...(targets.sites_multi_brand || [])];
-  const sites = allSites.filter((s) => s.platform === "shopify");
+  let sites = allSites.filter((s) => s.platform === "shopify");
+  let uncapped = false;
+
+  if (brandFilter) {
+    // "확인" 버튼으로 특정 브랜드를 지정한 경우 — 그 브랜드 공식몰만 캡 없이 전부 훑는다.
+    // 공식몰이 없는 브랜드(멀티브랜드 편집숍에서만 vendor로 등장하는 경우)는 편집숍들만 시도한다.
+    const matched = sites.filter((s) => s.brand.toLowerCase() === brandFilter.toLowerCase());
+    sites = matched.length ? matched : (targets.sites_multi_brand || []).filter((s) => s.platform === "shopify");
+    uncapped = true;
+  } else if (onlyPopular) {
+    // "Sale중" 탭 전용 — 대중적으로 잘 알려진 브랜드만 스캔해서 세일 신호의 노이즈를 줄인다.
+    sites = sites.filter((s) => s.popular === true);
+  }
 
   const results = await Promise.allSettled(
-    sites.map((site) => scanSite(site, cfg, mode))
+    sites.map((site) => scanSite(site, cfg, mode, uncapped))
   );
 
   const items = [];

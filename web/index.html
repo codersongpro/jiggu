@@ -347,8 +347,16 @@ nav button.on .dot{opacity:1}
         <select id="fTypeSel"><option value="">종류 전체</option></select>
         <select id="fPriceSel"><option value="">가격대 전체</option></select>
       </div>
+      <div class="dropRow">
+        <select id="fSortSel">
+          <option value="">추천순</option>
+          <option value="asc">가격 낮은순</option>
+          <option value="desc">가격 높은순</option>
+        </select>
+        <button class="btn primary" id="dropConfirmBtn" style="flex:2">확인</button>
+      </div>
       <div class="parsed" id="parsed"></div>
-      <p class="hint" id="hint">비워두면 오늘 올릴 만한 상품을 알아서 골라줍니다.</p>
+      <p class="hint" id="hint">브랜드를 고르고 확인을 누르면 그 브랜드 상품을 전부 찾아옵니다. 비워두고 확인하면 전체에서 추천을 골라줍니다.</p>
     </div>
     <div class="filterbar" id="filterBar"></div>
     <div class="reshead"><h2 id="resTitle"></h2><span id="resCount"></span></div>
@@ -491,7 +499,9 @@ const BRAND_KR = {
    ============================================================ */
 let SIGNALS = [];
 let ITEMS = [];
-let lastScanMeta = null; // {scannedAt, sitesTotal, sitesOk, sitesFailed, errors}
+// Sale중 탭과 상품탭은 완전히 다른 스캔으로 동작한다(서로의 상태를 덮어쓰지 않음).
+let lastSignalScanMeta = null; // Sale중 탭 — 인기 브랜드만 스캔
+let lastProductScanMeta = null; // 상품탭 — 확인 버튼으로 지정 브랜드 전체 또는 전체 브랜드 스캔
 
 /* 최저가 구입처 자동 선택 */
 function bestSource(it){
@@ -597,7 +607,7 @@ const $ = s => document.querySelector(s);
 /* 온디맨드 스캔이라 "어제 대비" 데이터가 없다. 스캔 기록을 서버에 쌓기 전까지는
    이번 스캔에서 감지된 브랜드별 세일 상품 수 랭킹으로 대신한다. */
 function renderSignals(){
-  if(!lastScanMeta){
+  if(!lastSignalScanMeta){
     $('#sigCount').innerHTML = `0<small>개 브랜드에서 세일 감지</small>`;
     $('#sigSub').textContent = '상단의 스캔 버튼을 눌러 지금 세일 중인 상품을 가져오세요.';
     $('#signalList').innerHTML = '';
@@ -605,7 +615,7 @@ function renderSignals(){
   }
   if(!SIGNALS.length){
     $('#sigCount').innerHTML = `0<small>개 브랜드에서 세일 감지</small>`;
-    $('#sigSub').textContent = `${lastScanMeta.sitesOk}개 사이트를 확인했지만 지금은 세일 상품이 없습니다.`;
+    $('#sigSub').textContent = `${lastSignalScanMeta.sitesOk}개 사이트를 확인했지만 지금은 세일 상품이 없습니다.`;
     $('#signalList').innerHTML = '';
     return;
   }
@@ -831,14 +841,18 @@ function renderItems(resetPage = true){
   });
 
   let list = ITEMS.filter(it => matches(it, f));
-  list = list.map(it => ({it, ...scoreItem(it)})).sort((a, b) => b.score - a.score);
+  list = list.map(it => ({it, ...scoreItem(it)}));
+  const sortMode = $('#fSortSel').value;
+  if(sortMode === 'asc') list.sort((a, b) => landed(a.it).total - landed(b.it).total);
+  else if(sortMode === 'desc') list.sort((a, b) => landed(b.it).total - landed(a.it).total);
+  else list.sort((a, b) => b.score - a.score);
 
   $('#resTitle').textContent = auto ? '오늘의 추천' : '검색 결과';
   $('#resCount').textContent = list.length ? list.length + '건' : '';
 
   if(!list.length){
-    $('#itemList').innerHTML = !lastScanMeta
-      ? `<p class="empty">아직 스캔하지 않았습니다.<br>상단 'Sale중' 탭에서 스캔 버튼을 눌러주세요.</p>`
+    $('#itemList').innerHTML = !lastProductScanMeta
+      ? `<p class="empty">아직 조회하지 않았습니다.<br>브랜드를 고르고 '확인'을 눌러주세요.</p>`
       : `<p class="empty">조건에 맞는 상품이 없습니다.<br>가격을 넓히거나 브랜드만 넣어보세요.</p>`;
     return;
   }
@@ -909,9 +923,9 @@ function populateDropdownFilters(){
   $('#fPriceSel').innerHTML = '<option value="">가격대 전체</option>' +
     PRICE_BANDS.map((b, i) => `<option value="${i}">${b.label}</option>`).join('');
 }
-['fBrandSel', 'fTypeSel', 'fPriceSel'].forEach(id => {
-  document.addEventListener('change', e => { if(e.target.id === id) renderItems(); });
-});
+// 브랜드/종류/가격대는 확인 버튼을 눌러야 적용된다(새로 크롤링해야 할 수도 있어서).
+// 정렬은 이미 불러온 상품을 다시 늘어놓는 것뿐이라 바로 반영한다.
+$('#fSortSel').addEventListener('change', () => renderItems(false));
 
 function matchBrandSuggest(q){
   if(!q) return [];
@@ -1246,28 +1260,38 @@ function buildSignals(items){
   return Object.values(map).sort((a, b) => b.count - a.count);
 }
 
+// 스캔 시점 실시간 환율을 반영한다 — 서버가 못 가져왔으면 fxRates가 cost.yaml 고정값 그대로 온다.
+// 어느 스캔(Sale중/상품)이든 최신 환율이면 반영해서 손해볼 게 없다.
+function applyFxRates(fxRates){
+  if(!fxRates) return;
+  CFG.fx.USD = Math.round(fxRates.USD);
+  CFG.fx.EUR = Math.round(fxRates.EUR);
+  CFG.fx.JPY = Math.round(fxRates.JPY * 100) / 100;
+  $('#fxUSD').value = CFG.fx.USD;
+  $('#fxEUR').value = CFG.fx.EUR;
+  saveCfg();
+}
+
+function toItems(apiItems){
+  const items = (apiItems || []).map(mapApiItem);
+  items.forEach(it => { it.sale = bestSource(it).price; it.type = detectType(it); });
+  return items;
+}
+
+/* ---------- Sale중 탭 전용 스캔 (헤더 스캔 버튼) ----------
+   인기 브랜드만 조회한다. 상품탭(ITEMS)은 절대 건드리지 않는다 — 두 탭은 완전히 분리돼 있다. */
 async function runScan(){
   const b = $('#scanBtn');
   b.disabled = true; b.textContent = '스캔 중';
   try{
-    const res = await fetch('/api/scan');
+    const res = await fetch('/api/scan?onlyPopular=1');
     if(!res.ok) throw new Error('서버 오류 (HTTP ' + res.status + ')');
     const data = await res.json();
 
-    ITEMS = (data.items || []).map(mapApiItem);
-    ITEMS.forEach(it => { it.sale = bestSource(it).price; it.type = detectType(it); });
-    SIGNALS = buildSignals(ITEMS);
-    lastScanMeta = data;
-
-    // 스캔 시점 실시간 환율을 반영한다 — 서버가 못 가져왔으면 fxRates가 cost.yaml 고정값 그대로 온다
-    if(data.fxRates){
-      CFG.fx.USD = Math.round(data.fxRates.USD);
-      CFG.fx.EUR = Math.round(data.fxRates.EUR);
-      CFG.fx.JPY = Math.round(data.fxRates.JPY * 100) / 100;
-      $('#fxUSD').value = CFG.fx.USD;
-      $('#fxEUR').value = CFG.fx.EUR;
-      saveCfg();
-    }
+    const signalItems = toItems(data.items);
+    SIGNALS = buildSignals(signalItems);
+    lastSignalScanMeta = data;
+    applyFxRates(data.fxRates);
 
     const now = new Date();
     $('#scanTime').textContent =
@@ -1280,10 +1304,47 @@ async function runScan(){
   }finally{
     b.disabled = false; b.textContent = '스캔';
     renderSignals();
-    renderItems();
   }
 }
 $('#scanBtn').onclick = runScan;
+
+/* ---------- 상품탭 전용 조회 (드롭다운 확인 버튼) ----------
+   브랜드를 지정하면 그 브랜드 사이트를 캡 없이 전부 훑고, 지정 안 하면 전체 브랜드를
+   훑는다(할인·저가 우선 캡 적용). Sale중 탭(SIGNALS)은 절대 건드리지 않는다. */
+async function runProductSearch(){
+  const btn = $('#dropConfirmBtn');
+  const brand = $('#fBrandSel').value;
+  btn.disabled = true;
+  const orig = btn.textContent;
+  btn.textContent = '조회 중…';
+  try{
+    const url = brand ? `/api/scan?brand=${encodeURIComponent(brand)}` : '/api/scan';
+    const res = await fetch(url);
+    if(!res.ok) throw new Error('서버 오류 (HTTP ' + res.status + ')');
+    const data = await res.json();
+
+    const found = toItems(data.items);
+    if(brand){
+      // 이 브랜드의 이전 결과만 갈아끼운다 — 다른 브랜드로 이미 불러온 상품은 그대로 둔다.
+      ITEMS = ITEMS.filter(it => it.brand !== brand).concat(found);
+    } else {
+      ITEMS = found;
+    }
+    lastProductScanMeta = data;
+    applyFxRates(data.fxRates);
+
+    toast(data.sitesFailed
+      ? `${data.sitesOk}/${data.sitesTotal} 사이트 확인 · ${data.itemCount}건 조회됨`
+      : `${data.sitesOk}개 사이트에서 ${data.itemCount}건 조회됨`);
+  }catch(e){
+    toast('조회 실패: ' + e.message);
+  }finally{
+    btn.disabled = false;
+    btn.textContent = orig;
+    renderItems();
+  }
+}
+$('#dropConfirmBtn').onclick = runProductSearch;
 
 loadCfg();
 populateDropdownFilters();
