@@ -9,8 +9,10 @@
       "currency": "USD",
       "category": "apparel",
       "platform": "shopify",
-      "verified": "confirmed",
-      "popular": true
+      "verified": "blocked",
+      "popular": true,
+      "blocked_error": "HTTP 404",
+      "blocked_checked_at": "2026-09-03"
     },
     {
       "brand": "AllSaints",
@@ -20,8 +22,10 @@
       "currency": "USD",
       "category": "apparel",
       "platform": "shopify",
-      "verified": "confirmed",
-      "popular": true
+      "verified": "blocked",
+      "popular": true,
+      "blocked_error": "HTTP 403",
+      "blocked_checked_at": "2026-09-03"
     },
     {
       "brand": "Ganni",
@@ -31,8 +35,10 @@
       "currency": "USD",
       "category": "apparel",
       "platform": "shopify",
-      "verified": "confirmed",
-      "popular": true
+      "verified": "blocked",
+      "popular": true,
+      "blocked_error": "fetch failed",
+      "blocked_checked_at": "2026-09-03"
     },
     {
       "brand": "Kith",
@@ -212,8 +218,10 @@
       "currency": "USD",
       "category": "apparel",
       "platform": "shopify",
-      "verified": "unconfirmed",
-      "popular": true
+      "verified": "blocked",
+      "popular": true,
+      "blocked_error": "HTTP 410",
+      "blocked_checked_at": "2026-09-03"
     },
     {
       "brand": "Sandro",
@@ -223,8 +231,10 @@
       "currency": "USD",
       "category": "apparel",
       "platform": "shopify",
-      "verified": "unconfirmed",
-      "popular": true
+      "verified": "blocked",
+      "popular": true,
+      "blocked_error": "HTTP 404",
+      "blocked_checked_at": "2026-09-03"
     },
     {
       "brand": "Maje",
@@ -234,8 +244,10 @@
       "currency": "USD",
       "category": "apparel",
       "platform": "shopify",
-      "verified": "unconfirmed",
-      "popular": true
+      "verified": "blocked",
+      "popular": true,
+      "blocked_error": "HTTP 404",
+      "blocked_checked_at": "2026-09-03"
     },
     {
       "brand": "Zadig&Voltaire",
@@ -245,8 +257,10 @@
       "currency": "USD",
       "category": "apparel",
       "platform": "shopify",
-      "verified": "unconfirmed",
-      "popular": true
+      "verified": "blocked",
+      "popular": true,
+      "blocked_error": "HTTP 404",
+      "blocked_checked_at": "2026-09-03"
     },
     {
       "brand": "Veja",
@@ -266,8 +280,10 @@
       "currency": "USD",
       "category": "apparel",
       "platform": "shopify",
-      "verified": "unconfirmed",
-      "popular": true
+      "verified": "blocked",
+      "popular": true,
+      "blocked_error": "HTTP 403",
+      "blocked_checked_at": "2026-09-03"
     },
     {
       "brand": "Coach",
@@ -277,8 +293,10 @@
       "currency": "USD",
       "category": "bag",
       "platform": "shopify",
-      "verified": "unconfirmed",
-      "popular": true
+      "verified": "blocked",
+      "popular": true,
+      "blocked_error": "HTTP 403",
+      "blocked_checked_at": "2026-09-03"
     },
     {
       "brand": "Coach Outlet",
@@ -288,8 +306,10 @@
       "currency": "USD",
       "category": "bag",
       "platform": "shopify",
-      "verified": "unconfirmed",
-      "popular": true
+      "verified": "blocked",
+      "popular": true,
+      "blocked_error": "HTTP 403",
+      "blocked_checked_at": "2026-09-03"
     },
     {
       "brand": "New Balance",
@@ -299,8 +319,10 @@
       "currency": "USD",
       "category": "shoes",
       "platform": "shopify",
-      "verified": "unconfirmed",
-      "popular": true
+      "verified": "blocked",
+      "popular": true,
+      "blocked_error": "HTTP 403",
+      "blocked_checked_at": "2026-09-03"
     },
     {
       "brand": "Polo Ralph Lauren",
@@ -310,8 +332,10 @@
       "currency": "USD",
       "category": "apparel",
       "platform": "shopify",
-      "verified": "unconfirmed",
-      "popular": true
+      "verified": "blocked",
+      "popular": true,
+      "blocked_error": "HTTP 410",
+      "blocked_checked_at": "2026-09-03"
     },
     {
       "brand": "COS",
@@ -321,8 +345,10 @@
       "currency": "USD",
       "category": "apparel",
       "platform": "shopify",
-      "verified": "unconfirmed",
-      "popular": true
+      "verified": "blocked",
+      "popular": true,
+      "blocked_error": "HTTP 403",
+      "blocked_checked_at": "2026-09-03"
     },
     {
       "brand": "Isabel Marant",
@@ -343,8 +369,10 @@
       "currency": "USD",
       "category": "bag",
       "platform": "shopify",
-      "verified": "unconfirmed",
-      "popular": true
+      "verified": "blocked",
+      "popular": true,
+      "blocked_error": "HTTP 503",
+      "blocked_checked_at": "2026-09-03"
     },
     {
       "brand": "Marc Jacobs",
@@ -354,8 +382,10 @@
       "currency": "USD",
       "category": "bag",
       "platform": "shopify",
-      "verified": "unconfirmed",
-      "popular": true
+      "verified": "blocked",
+      "popular": true,
+      "blocked_error": "HTTP 404",
+      "blocked_checked_at": "2026-09-03"
     },
     {
       "brand": "Kate Spade",
@@ -365,8 +395,10 @@
       "currency": "USD",
       "category": "bag",
       "platform": "shopify",
-      "verified": "unconfirmed",
-      "popular": true
+      "verified": "blocked",
+      "popular": true,
+      "blocked_error": "HTTP 403",
+      "blocked_checked_at": "2026-09-03"
     },
     {
       "brand": "Kate Spade Outlet",
@@ -376,8 +408,10 @@
       "currency": "USD",
       "category": "bag",
       "platform": "shopify",
-      "verified": "unconfirmed",
-      "popular": true
+      "verified": "blocked",
+      "popular": true,
+      "blocked_error": "HTTP 403",
+      "blocked_checked_at": "2026-09-03"
     },
     {
       "brand": "Michael Kors",
@@ -387,8 +421,10 @@
       "currency": "USD",
       "category": "bag",
       "platform": "shopify",
-      "verified": "unconfirmed",
-      "popular": true
+      "verified": "blocked",
+      "popular": true,
+      "blocked_error": "HTTP 403",
+      "blocked_checked_at": "2026-09-03"
     },
     {
       "brand": "Longchamp",
@@ -398,8 +434,10 @@
       "currency": "USD",
       "category": "bag",
       "platform": "shopify",
-      "verified": "unconfirmed",
-      "popular": true
+      "verified": "blocked",
+      "popular": true,
+      "blocked_error": "Unexpected token '<'",
+      "blocked_checked_at": "2026-09-03"
     },
     {
       "brand": "Ferragamo",

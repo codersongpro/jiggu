@@ -191,7 +191,9 @@ module.exports = async function handler(req, res) {
   }
 
   const allSites = [...targets.sites, ...(targets.sites_multi_brand || [])];
-  let sites = allSites.filter((s) => s.platform === "shopify");
+  // verified:"blocked"는 실제 배포 스캔에서 403/404/410/503 등으로 확인된 사이트다.
+  // 매번 다시 시도해도 결과가 같으므로 스캔 대상에서 제외해 타임아웃 예산을 아낀다.
+  let sites = allSites.filter((s) => s.platform === "shopify" && s.verified !== "blocked");
   let uncapped = false;
 
   if (brandFilter) {
