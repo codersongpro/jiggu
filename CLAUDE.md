@@ -158,9 +158,24 @@ SQLite 저장은 이번 1차 범위 밖이다 — 아래 "미완성" 참고.
 실패했다 — 즉 Shopify 자체가 아니라서가 아니라, **서버사이드(Vercel 서버리스) 요청 자체를
 막는 안티봇/WAF**일 가능성이 크다. 코치·마이클코어스·케이트스페이드·랄프로렌·뉴발란스·라코스테처럼
 전세계적으로 유명한 대형 브랜드가 대거 포함된 것도 이 해석과 맞는다 — Nordstrom Rack/SSENSE와
-같은 부류로 봐야 한다. 남은 `unconfirmed` 사이트(Isabel Marant, Ferragamo, Golden Goose, Ugg,
-On Running, Salomon, Arc'teryx, Patagonia, Lululemon, Barbour, Carhartt WIP, Max Mara, Stussy,
-Self-Portrait 등)는 아직 스캔 결과가 확인되지 않았다 — 다음 스캔에서 결과를 봐야 한다.
+같은 부류로 봐야 한다.
+
+### 2차 스캔 결과 (2026-09-05)
+남아 있던 `unconfirmed` 사이트 중 16곳도 같은 패턴(403/404/410/파싱 에러/타임아웃)으로
+실패해 `verified: "blocked"` 처리했다.
+
+| 브랜드 | 에러 |
+|---|---|
+| 살로몬, 아크테릭스, 파타고니아, 바버, 칼하트, 셀프포트레이트, 쟈딕앤볼테르 EU | HTTP 404 |
+| 페라가모, 룰루레몬, 막스마라 | HTTP 403 |
+| 골든구스, 어그 | HTTP 410 |
+| 온러닝, 산드로 EU, 마쥬 EU(파싱 에러) | `Unexpected token '<'` |
+| 가니 EU | 타임아웃(aborted) |
+
+남은 `unconfirmed` 사이트(Isabel Marant, Cuyana, Naadam, M.Gemi, Marine Layer, Faherty, Kotn,
+Veja, Reiss, Vince, Free People, Aritzia, Staud, Stance, Cotopaxi, Vuori, Chubbies, Untuckit,
+ThirdLove, Taylor Stitch, Rowing Blazers, Birdies, Verishop, The Webster, Kirna Zabete 등)는
+아직 스캔 결과가 확인되지 않았다 — 다음 스캔에서 결과를 봐야 한다.
 
 ### 미완성 — 여기서부터 작업
 - [ ] 여러 몰 교차 매칭 → 최저가 구입처 자동 선택 (지금은 사이트 하나당 소스 하나만 본다)

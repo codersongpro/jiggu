@@ -447,8 +447,10 @@
       "currency": "USD",
       "category": "bag",
       "platform": "shopify",
-      "verified": "unconfirmed",
-      "popular": true
+      "verified": "blocked",
+      "popular": true,
+      "blocked_error": "HTTP 403",
+      "blocked_checked_at": "2026-09-05"
     },
     {
       "brand": "Golden Goose",
@@ -458,8 +460,10 @@
       "currency": "USD",
       "category": "shoes",
       "platform": "shopify",
-      "verified": "unconfirmed",
-      "popular": true
+      "verified": "blocked",
+      "popular": true,
+      "blocked_error": "HTTP 410",
+      "blocked_checked_at": "2026-09-05"
     },
     {
       "brand": "Ugg",
@@ -469,8 +473,10 @@
       "currency": "USD",
       "category": "shoes",
       "platform": "shopify",
-      "verified": "unconfirmed",
-      "popular": true
+      "verified": "blocked",
+      "popular": true,
+      "blocked_error": "HTTP 410",
+      "blocked_checked_at": "2026-09-05"
     },
     {
       "brand": "On Running",
@@ -480,8 +486,10 @@
       "currency": "USD",
       "category": "shoes",
       "platform": "shopify",
-      "verified": "unconfirmed",
-      "popular": true
+      "verified": "blocked",
+      "popular": true,
+      "blocked_error": "Unexpected token '<'",
+      "blocked_checked_at": "2026-09-05"
     },
     {
       "brand": "Salomon",
@@ -491,8 +499,10 @@
       "currency": "USD",
       "category": "shoes",
       "platform": "shopify",
-      "verified": "unconfirmed",
-      "popular": true
+      "verified": "blocked",
+      "popular": true,
+      "blocked_error": "HTTP 404",
+      "blocked_checked_at": "2026-09-05"
     },
     {
       "brand": "Arc’teryx",
@@ -502,8 +512,10 @@
       "currency": "USD",
       "category": "apparel",
       "platform": "shopify",
-      "verified": "unconfirmed",
-      "popular": true
+      "verified": "blocked",
+      "popular": true,
+      "blocked_error": "HTTP 404",
+      "blocked_checked_at": "2026-09-05"
     },
     {
       "brand": "Patagonia",
@@ -513,8 +525,10 @@
       "currency": "USD",
       "category": "apparel",
       "platform": "shopify",
-      "verified": "unconfirmed",
-      "popular": true
+      "verified": "blocked",
+      "popular": true,
+      "blocked_error": "HTTP 404",
+      "blocked_checked_at": "2026-09-05"
     },
     {
       "brand": "Lululemon",
@@ -524,8 +538,10 @@
       "currency": "USD",
       "category": "apparel",
       "platform": "shopify",
-      "verified": "unconfirmed",
-      "popular": true
+      "verified": "blocked",
+      "popular": true,
+      "blocked_error": "HTTP 403",
+      "blocked_checked_at": "2026-09-05"
     },
     {
       "brand": "Barbour",
@@ -535,8 +551,10 @@
       "currency": "USD",
       "category": "apparel",
       "platform": "shopify",
-      "verified": "unconfirmed",
-      "popular": true
+      "verified": "blocked",
+      "popular": true,
+      "blocked_error": "HTTP 404",
+      "blocked_checked_at": "2026-09-05"
     },
     {
       "brand": "Carhartt WIP",
@@ -546,8 +564,10 @@
       "currency": "USD",
       "category": "apparel",
       "platform": "shopify",
-      "verified": "unconfirmed",
-      "popular": true
+      "verified": "blocked",
+      "popular": true,
+      "blocked_error": "HTTP 404",
+      "blocked_checked_at": "2026-09-05"
     },
     {
       "brand": "Reiss",
@@ -577,8 +597,10 @@
       "currency": "USD",
       "category": "apparel",
       "platform": "shopify",
-      "verified": "unconfirmed",
-      "popular": true
+      "verified": "blocked",
+      "popular": true,
+      "blocked_error": "HTTP 403",
+      "blocked_checked_at": "2026-09-05"
     },
     {
       "brand": "Free People",
@@ -639,8 +661,10 @@
       "currency": "USD",
       "category": "apparel",
       "platform": "shopify",
-      "verified": "unconfirmed",
-      "popular": true
+      "verified": "blocked",
+      "popular": true,
+      "blocked_error": "HTTP 404",
+      "blocked_checked_at": "2026-09-05"
     },
     {
       "brand": "Sezane",
@@ -670,8 +694,10 @@
       "currency": "EUR",
       "category": "apparel",
       "platform": "shopify",
-      "verified": "unconfirmed",
-      "popular": true
+      "verified": "blocked",
+      "popular": true,
+      "blocked_error": "Unexpected token '<'",
+      "blocked_checked_at": "2026-09-05"
     },
     {
       "brand": "Maje EU",
@@ -681,8 +707,10 @@
       "currency": "EUR",
       "category": "apparel",
       "platform": "shopify",
-      "verified": "unconfirmed",
-      "popular": true
+      "verified": "blocked",
+      "popular": true,
+      "blocked_error": "Unexpected token '<'",
+      "blocked_checked_at": "2026-09-05"
     },
     {
       "brand": "Zadig&Voltaire EU",
@@ -692,8 +720,10 @@
       "currency": "EUR",
       "category": "apparel",
       "platform": "shopify",
-      "verified": "unconfirmed",
-      "popular": true
+      "verified": "blocked",
+      "popular": true,
+      "blocked_error": "HTTP 404",
+      "blocked_checked_at": "2026-09-05"
     },
     {
       "brand": "Ganni EU",
@@ -703,8 +733,10 @@
       "currency": "EUR",
       "category": "apparel",
       "platform": "shopify",
-      "verified": "unconfirmed",
-      "popular": true
+      "verified": "blocked",
+      "popular": true,
+      "blocked_error": "This operation was aborted",
+      "blocked_checked_at": "2026-09-05"
     },
     {
       "brand": "Bombas",
@@ -817,7 +849,7 @@
       "verified": "unconfirmed"
     }
   ],
-  "_multi_brand_readme": "아래 sites_multi_brand는 여러 브랜드를 한 사이트에서 파는 편집숍이다. 'brand' 필드는 구입처(사이트) 이름일 뿐, 실제 상품 브랜드는 api/scan.js가 Shopify 응답의 vendor 필드에서 자동으로 읽는다 — 그래서 이 목록에 없는 브랜드가 갑자기 세일해도 브랜드를 미리 등록할 필요 없이 잡힌다. category도 상품 제목/product_type을 보고 자동 보정한다.",
+  "_multi_brand_readme": "아래 sites_multi_brand는 여러 브랜드를 한 사이트에서 파는 편집숍이다. 'brand' 필드는 구입처(사이트) 이름일 뿐, 실제 상품 브랜드는 api/scan.js가 Shopify 응답의 vendor 필드에서 자동으로 읽는다 — 그래서 이 목록에 없는 브랜드가 갑자기 세일해도 브랜드를 미리 등록할 필요 없이 잡힌다. category도 상품 제목/product_type을 보고 자동 보정한다. Carbon38/Concepts/Bodega/Goop은 2026-09-05에 추가한 후보로, 이 세션도 외부망이 막혀 있어 실제 접속 검증을 못했다 — 배포 후 스캔해서 errors에 뭐가 실패하는지 확인할 것.",
   "sites_multi_brand": [
     {
       "brand": "Bandier",
@@ -853,6 +885,46 @@
       "brand": "Kirna Zabete",
       "brand_kr": "키르나자베트",
       "domain": "www.kirnazabete.com",
+      "region": "US",
+      "currency": "USD",
+      "category": "apparel",
+      "platform": "shopify",
+      "verified": "unconfirmed"
+    },
+    {
+      "brand": "Carbon38",
+      "brand_kr": "카본38",
+      "domain": "carbon38.com",
+      "region": "US",
+      "currency": "USD",
+      "category": "apparel",
+      "platform": "shopify",
+      "verified": "unconfirmed"
+    },
+    {
+      "brand": "Concepts",
+      "brand_kr": "콘셉츠",
+      "domain": "cncpts.com",
+      "region": "US",
+      "currency": "USD",
+      "category": "shoes",
+      "platform": "shopify",
+      "verified": "unconfirmed"
+    },
+    {
+      "brand": "Bodega",
+      "brand_kr": "보데가",
+      "domain": "bdgastore.com",
+      "region": "US",
+      "currency": "USD",
+      "category": "shoes",
+      "platform": "shopify",
+      "verified": "unconfirmed"
+    },
+    {
+      "brand": "Goop",
+      "brand_kr": "굽",
+      "domain": "shop.goop.com",
       "region": "US",
       "currency": "USD",
       "category": "apparel",
