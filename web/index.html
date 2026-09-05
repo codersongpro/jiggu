@@ -331,6 +331,13 @@ nav button.on .dot{opacity:1}
       <p id="sigSub">라코스테는 12시간 전만 해도 세일 상품이 8%였습니다.</p>
       <button class="btn" id="sigErrToggle" style="display:none;width:auto;padding:6px 14px;font-size:12px;margin-top:8px"></button>
       <div id="sigErrList" style="display:none;margin-top:8px"></div>
+      <div class="dropRow">
+        <select id="sigSortSel">
+          <option value="">세일 많은순</option>
+          <option value="off">할인율 높은순</option>
+          <option value="brand">브랜드순</option>
+        </select>
+      </div>
     </div>
     <ul class="rows" id="signalList"></ul>
   </section>
@@ -354,6 +361,7 @@ nav button.on .dot{opacity:1}
           <option value="">추천순</option>
           <option value="asc">가격 낮은순</option>
           <option value="desc">가격 높은순</option>
+          <option value="brand">브랜드순</option>
         </select>
         <button class="btn primary" id="dropConfirmBtn" style="flex:2">확인</button>
       </div>
@@ -668,8 +676,17 @@ function renderSignals(){
     `${BRAND_KR[top.brand] || top.brand}에서 세일 상품 ${top.count}개가 감지됐습니다. ` +
     `(전일 대비 변화는 스캔 기록이 쌓이면 표시됩니다)`;
 
+  // SIGNALS 자체는 buildSignals()가 정한 기본순(세일 많은순)을 유지하고,
+  // 화면에 뿌릴 때만 선택한 정렬 기준으로 복사본을 정렬한다.
+  const sigSortMode = $('#sigSortSel').value;
+  const sorted = [...SIGNALS];
+  if(sigSortMode === 'off') sorted.sort((a, b) => b.maxOff - a.maxOff);
+  else if(sigSortMode === 'brand') sorted.sort((a, b) =>
+    (BRAND_KR[a.brand] || a.brand).localeCompare(BRAND_KR[b.brand] || b.brand, 'ko'));
+  else sorted.sort((a, b) => b.count - a.count);
+
   const maxCount = Math.max(...SIGNALS.map(s => s.count));
-  $('#signalList').innerHTML = SIGNALS.map(s => {
+  $('#signalList').innerHTML = sorted.map(s => {
     const pct = Math.round((s.count / maxCount) * 100);
     return `<li><button class="row" data-brand="${s.brand}">
       <div class="row-top">
@@ -909,6 +926,8 @@ function renderItems(resetPage = true){
   const sortMode = $('#fSortSel').value;
   if(sortMode === 'asc') list.sort((a, b) => landed(a.it).total - landed(b.it).total);
   else if(sortMode === 'desc') list.sort((a, b) => landed(b.it).total - landed(a.it).total);
+  else if(sortMode === 'brand') list.sort((a, b) =>
+    (BRAND_KR[a.it.brand] || a.it.brand).localeCompare(BRAND_KR[b.it.brand] || b.it.brand, 'ko'));
   else list.sort((a, b) => b.score - a.score);
 
   $('#resTitle').textContent = auto ? '오늘의 추천' : '검색 결과';
@@ -993,6 +1012,7 @@ function populateDropdownFilters(){
 // 브랜드/종류/가격대는 확인 버튼을 눌러야 적용된다(새로 크롤링해야 할 수도 있어서).
 // 정렬은 이미 불러온 상품을 다시 늘어놓는 것뿐이라 바로 반영한다.
 $('#fSortSel').addEventListener('change', () => renderItems(false));
+$('#sigSortSel').addEventListener('change', () => renderSignals());
 
 function matchBrandSuggest(q){
   if(!q) return [];
