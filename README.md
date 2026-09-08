@@ -29,7 +29,8 @@
 ├── crawlers/                 수집 어댑터 (jsonld / links / generic-jsonld / rei-us)
 ├── scripts/
 │   ├── local-crawler/crawl.js  PC 브라우저 수집기 (Playwright)
-│   └── feed-import/            어필리에이트 상품 피드 변환기
+│   ├── feed-import/            어필리에이트 상품 피드 변환기
+│   └── export-excel.js         수집 결과 → 엑셀(.xlsx) 정리
 ├── core/landed_cost.py       원가 계산 엔진 (Python, 참고/검증용)
 ├── tests/                    회귀 테스트 (node --test, 네트워크 미사용)
 └── vercel.json / package.json
@@ -84,6 +85,30 @@ npm run feed-import -- ~/Downloads/coach-feed.csv --brand "Coach"            # �
 
 만들어진 JSON을 앱 **설정 탭 → 수집 결과 가져오기**에서 열면 상품 탭에 합쳐진다.
 자세한 내용은 `scripts/local-crawler/README.md`, `scripts/feed-import/README.md` 참고.
+
+### 엑셀로 정리하기
+
+수집 결과 JSON을 엑셀(.xlsx) 한 파일로 정리한다. 여러 파일을 한 번에 넣으면 합쳐서 정리한다.
+
+```bash
+npm run excel -- output/rei-us.json
+npm run excel -- output/rei-us.json output/jp.json --output output/소싱목록.xlsx
+npm run excel -- output/rei-us.json --business --markup 1.8 --sale-only --min-off 40
+
+npm run crawl -- --source rei-us --limit 20 --xlsx   # 수집하면서 바로 엑셀까지
+```
+
+| 시트 | 내용 |
+|---|---|
+| **상품** | 브랜드(한글/영문)·상품명·판매처·국가·통화·정가·판매가·할인율·최종원가·예상판매가·관세·재고·사이즈·색상·SKU·수집시각·상품링크. 할인율 높은 순 정렬, 40% 이상은 빨간 굵은 글씨, 상품링크는 클릭 가능 |
+| **판매처 상태** | 판매처별 상태(정상/차단됨/요청 제한/주소 없음…)·범위 완료 여부·발견/조회/정상/제외 건수·HTTP·오류 |
+| **브랜드 요약** | 브랜드별 상품 수·세일 수·최고/평균 할인율·최저 원가·판매처 |
+| **실행 정보** | 통관 모드·판매가 배수·환율과 기준일·원본 파일·주의사항 |
+
+원가는 파일에 저장된 값이 아니라 **지금의 `config/cost.yaml` 기준으로 다시 계산**한다.
+환율이나 통관 모드를 바꾸고 다시 돌리면 그 기준으로 나온다. 세금·배대지 조건이 검증되지
+않은 시장(영국 등)은 원가 칸을 비우고 '원가 비고'에 사유를 적는다 — 빈칸을 0으로 착각해
+쓰지 않도록 일부러 채우지 않는다.
 
 ### 판매처 상태 (`config/targets.json`의 `support.status`)
 

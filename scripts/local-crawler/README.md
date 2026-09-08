@@ -58,6 +58,7 @@ npm run crawl -- --source rei-us --business --limit 20 --output output/rei-busin
 | `--business` | 사업자 사입 모드로 원가 계산 (기본: 구매대행) |
 | `--concurrency` | 동시에 보는 판매처 수 (기본 2) |
 | `--output` | 결과 JSON 경로 (기본 `output/local-scan-<타임스탬프>.json`) |
+| `--xlsx` | 수집이 끝나면 같은 이름의 엑셀(.xlsx)도 만든다 (`npm run excel`과 같은 형식) |
 | `--headed` | 브라우저 창을 띄워 동작 확인 |
 
 `--source`, `--countries`, `--resume` 중 하나도 없으면 도움말만 출력하고 실행하지 않는다.

@@ -143,6 +143,8 @@
 - `scripts/local-crawler/crawl.js` — CLI 계약(--source/--countries/--brand/--limit/
   --resume/--business/--output), 이어받기, 요청 간격·재시도·한도, 종료 코드 0/2/1
 - `scripts/feed-import/` — 숫자·통화·재고·XML 파싱 수정, schemaVersion 2 출력
+- `scripts/export-excel.js` — 수집 결과 → 엑셀(상품/판매처 상태/브랜드 요약/실행 정보 4시트).
+  원가는 저장값이 아니라 지금 cost.yaml 기준으로 재계산하고, 계산 불가 시장은 칸을 비운다
 - `config/targets.json` — 판매처 정본(102곳: 서버 82 + PC 20). 8개국 검증 후보 등록
 - `config/cost.yaml` — `markets` 섹션 추가(시장 → 통화·원가 프로필·VAT). GB는 프로필 없음
 - `web/index.html` — 안전 렌더링(textContent), 원자적 가져오기, IndexedDB 복원,
@@ -162,7 +164,7 @@
 - [ ] 여러 몰 교차 매칭 → 최저가 구입처 자동 선택 (지금은 판매처 하나당 소스 하나)
 - [ ] 스캔 결과 저장소(Vercel Postgres/KV 등) → 어제 대비 세일 급변 감지 복원
 - [ ] 국내 시세 매칭 정확도 (키워드 검색 → SKU/바코드 매칭)
-- [ ] `output/excel.py`, 텔레그램 알림
+- [ ] 텔레그램 알림
 - [ ] 피드 자동 갱신 (키는 반드시 환경변수로)
 - [ ] 일본 라쿠텐 공식 API 연동
 - [ ] 상품명 한글 번역 (지금은 영문 원문 그대로 표시)
