@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:g="http://base.google.com/ns/1.0">
+  <channel>
+    <title>Sample Merchant Feed</title>
+    <item>
+      <g:id>SKU-JP-1</g:id>
+      <g:title>Wool Coat &amp; Scarf Set</g:title>
+      <g:brand>BEAMS</g:brand>
+      <g:price>12,800 JPY</g:price>
+      <g:link>https://example.co.jp/item/1</g:link>
+      <g:image_link>https://cdn.example.co.jp/1.jpg</g:image_link>
+      <g:availability>in stock</g:availability>
+      <g:quantity>10</g:quantity>
+    </item>
+    <item>
+      <g:id>SKU-GB-2</g:id>
+      <g:title><![CDATA[Merino Jumper <Slim>]]></g:title>
+      <g:brand>END.</g:brand>
+      <g:price currency="GBP">19.99</g:price>
+      <g:link>https://example.co.uk/p/2</g:link>
+      <g:availability>in stock</g:availability>
+      <g:quantity>3</g:quantity>
+    </item>
+    <item>
+      <g:id>SKU-US-3</g:id>
+      <g:title>Sold Out Tee</g:title>
+      <g:brand>Stance</g:brand>
+      <g:price>29.00 USD</g:price>
+      <g:link>https://example.com/p/3</g:link>
+      <g:availability>out of stock</g:availability>
+      <g:quantity>0</g:quantity>
+    </item>
+  </channel>
+</rss>
