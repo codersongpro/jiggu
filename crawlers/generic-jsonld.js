@@ -21,6 +21,13 @@ const READY_TIMEOUT_MS = 12000;
 
 const BLOCK_HINTS = /captcha|are you a human|access denied|blocked|incapsula|cf-chl|请稍候|verify you are human/i;
 
+/** 브라우저 이동 실패 메시지를 상태로 옮긴다. 시간 초과와 연결 실패는 다른 진단이다. */
+function statusFromNavError(message) {
+  const m = String(message || "");
+  if (/timeout|exceeded/i.test(m)) return S.TIMEOUT;
+  return S.HTTP_ERROR; // ERR_TUNNEL_CONNECTION_FAILED, ERR_NAME_NOT_RESOLVED 등
+}
+
 /** 페이지 응답 상태를 수집 상태로 옮긴다 */
 function statusFromResponse(res) {
   if (!res) return null;
@@ -73,7 +80,7 @@ async function discoverProducts(ctx) {
   try {
     res = await page.goto(pageUrl, { waitUntil: "domcontentloaded", timeout: NAV_TIMEOUT_MS });
   } catch (err) {
-    return { links: [], nextCursor: null, complete: false, status: S.TIMEOUT, error: String(err.message).slice(0, 200), listingUrl: pageUrl };
+    return { links: [], nextCursor: null, complete: false, status: statusFromNavError(err.message), error: String(err.message).slice(0, 200), listingUrl: pageUrl };
   }
   const bad = statusFromResponse(res);
   if (bad) return { links: [], nextCursor: null, complete: false, status: bad.status, httpStatus: bad.httpStatus, listingUrl: pageUrl };
@@ -124,7 +131,7 @@ async function fetchOffers(ctx) {
   try {
     res = await page.goto(url, { waitUntil: "domcontentloaded", timeout: NAV_TIMEOUT_MS });
   } catch (err) {
-    return { item: null, status: S.TIMEOUT, error: String(err.message).slice(0, 200) };
+    return { item: null, status: statusFromNavError(err.message), error: String(err.message).slice(0, 200) };
   }
   const bad = statusFromResponse(res);
   // 개별 상품 404는 그 상품만 건너뛴다 — 사이트 전체 차단으로 바꾸지 않는다
@@ -144,6 +151,7 @@ module.exports = {
   name: "jsonld-browser",
   discoverProducts,
   fetchOffers,
+  statusFromNavError,
   waitForContent,
   statusFromResponse,
   NAV_TIMEOUT_MS,

@@ -81,6 +81,23 @@ node --check scripts/feed-import/import-feed.js
 계획이 요구한 "국가별 실제 20건 수집 + 표본 3건 대조"는 **하지 못했다.**
 이 세션의 egress 정책이 외부 쇼핑몰 도메인을 차단한다(www.rei.com → 프록시 403).
 
+실제로 이 저장소의 수집기를 그대로 실행해 확인한 결과다.
+
+```
+$ npm run crawl -- --source rei-us --limit 1 --output output/rei-try.json
+대상 판매처 1곳 · 판매처당 최대 1건 · 구매대행 모드
+  - rei-us (REI, US, rei-us)
+수집된 상품이 없습니다. 위의 판매처별 상태를 확인하세요.
+
+판매처별 상태:
+  rei-us   http_error   정상 0건 · page.goto: net::ERR_TUNNEL_CONNECTION_FAILED at https://www.rei.com/c/clothing
+(종료 코드 1, 결과 파일은 생성되지 않음)
+```
+
+즉 수집기 자체는 실제 Chromium으로 동작하지만, **이 환경에서는 사이트에 도달할 수 없다.**
+(위 실행은 `statusFromNavError` 개선 전 `timeout`으로 표시됐고, 지금은 연결 실패를
+`http_error`로 구분한다.)
+
 따라서:
 
 - `config/targets.json`의 모든 신규 판매처는 `support.status: "unverified"`로 두었다.

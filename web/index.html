@@ -1419,8 +1419,14 @@ async function runChunkedScan(params, onProgress){
       sourceResults: data.sourceResults,
       items: data.items
     });
-    if(validated.ok) acc.add(validated.result);
-    else if(data.items && data.items.length) errors.push({sourceId:'(응답)', brand:'응답 형식', error: validated.errors[0]});
+    // 상품이 0건인 조각(실패·빈 페이지)도 판매처 상태는 누적해야 진행률과 진단이 맞는다
+    acc.add({
+      items: validated.ok ? validated.result.items : [],
+      sourceResults: validated.ok ? validated.result.sourceResults : (data.sourceResults || [])
+    });
+    if(!validated.ok && (data.items || []).length){
+      errors.push({sourceId:'(응답)', brand:'응답 형식', error: validated.errors[0]});
+    }
 
     (data.errors || []).forEach(e => errors.push(e));
     if(onProgress) onProgress({chunks, items: acc.size, planned: (data.plannedSources || []).length, cursor: data.nextCursor});
