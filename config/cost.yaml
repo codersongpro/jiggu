@@ -14,10 +14,33 @@ meta:
 # ------------------------------------------------------------
 fx:
   card_fee_rate: 0.025          # 해외카드 수수료 약 2.5% (비자/마스터 1% + 은행 1.5%)
+  as_of: "2026-09-03"           # 아래 고정값의 기준일. 스캔 시 실시간 환율을 받으면 그 날짜로 교체된다
+  source: "config/cost.yaml 고정값"
   base_rate:                    # 매매기준율 (수동 갱신 또는 API 주입)
     USD: 1380.0
     EUR: 1490.0
     JPY: 9.2                    # 100엔이 아니라 1엔 기준
+    # GBP는 일부러 비워둔다 — 환율만 넣고 영국 세금·배대지 조건을 EU 규칙으로
+    # 대신 쓰면 원가가 틀어진다. markets.GB의 cost_profile이 null인 이유와 같다.
+
+# ------------------------------------------------------------
+# 시장(국가) → 통화 / 원가 프로필 / 현지 부가세율
+#   marketCountry는 '실제 쇼핑 시장'이고, cost_profile은 '세율·배대지 요율을
+#   아는 구간(US/EU/JP)'이다. 둘을 같은 것으로 보면 안 된다.
+#   cost_profile이 null인 시장은 원문 가격만 보존하고 원가는 "계산 미완료"로 표시한다.
+# ------------------------------------------------------------
+markets:
+  US: { currency: USD, cost_profile: US }
+  JP: { currency: JPY, cost_profile: JP }
+  DE: { currency: EUR, cost_profile: EU, vat_rate: 0.19 }
+  FR: { currency: EUR, cost_profile: EU, vat_rate: 0.20 }
+  IT: { currency: EUR, cost_profile: EU, vat_rate: 0.22 }
+  ES: { currency: EUR, cost_profile: EU, vat_rate: 0.21 }
+  NL: { currency: EUR, cost_profile: EU, vat_rate: 0.21 }
+  GB:
+    currency: GBP
+    cost_profile: null          # 영국은 EU가 아니다. 세금·배대지 조건을 검증하기 전까지 계산하지 않는다
+    note: "영국 시장 — VAT 환급·배대지 요율 미검증이라 원가 계산을 하지 않습니다(원문 가격만 표시)"
 
 # ------------------------------------------------------------
 # 현지 판매세 / 부가세
