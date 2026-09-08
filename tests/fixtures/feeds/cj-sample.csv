@@ -1,0 +1,5 @@
+NAME,BRAND,SKU,RETAIL_PRICE,SALE_PRICE,CURRENCY,BUY_URL,IMAGE_URL,CATEGORY,IN_STOCK
+"Leather Tote, Large",Coach,C-1,"1,299.00","899.00",USD,https://example.com/p/c1,https://cdn.example.com/c1.jpg,Handbags,yes
+"Quilted Jacket
+(2-line title)",Coach,C-2,"€1.299,00","€999,00",EUR,https://example.com/p/c2,https://cdn.example.com/c2.jpg,Outerwear,yes
+"Say ""Hello"" Tee",Coach,C-3,49.00,49.00,USD,https://example.com/p/c3,,T-Shirts,10

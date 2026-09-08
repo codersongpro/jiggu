@@ -1,30 +1,112 @@
-// 스캔 API — targets.json에 등록된 Shopify 기반 브랜드몰들을 병렬로 조회해
-// 세일 중인 상품만 뽑아 정리한다. 사이트 하나가 막혀도 나머지는 계속 진행한다.
+// 스캔 API — config/targets.json에 등록된 판매처를 "한 번에 한 소스의 한 페이지"씩 조회한다.
 //
-// 이 세션은 외부 네트워크가 막혀 있어 실제 사이트 응답을 검증하지 못했다.
-// Shopify 표준 스펙(https://{도메인}/products.json)대로 작성했으니
-// 배포 후 실제로 스캔을 돌려 sitesFailed / errors를 확인할 것.
+// 왜 조각(chunk) 단위인가: 예전에는 한 번의 호출로 활성 47곳을 전부 훑었고, 브랜드를
+// 지정해도 전체를 훑은 뒤 편집숍을 한 번 더 붙여서 같은 사이트에 두 번 요청했다(리뷰 R02).
+// 서버리스 실행시간 안에 끝내려고 페이지 수를 4개로 제한해놓고 "브랜드 전체"라고
+// 안내하기도 했다(R03). 이제 호출당 한 소스의 한 페이지만 처리하고, 다음 위치를
+// nextCursor로 돌려준다. 웹이 cursor를 끝까지 소비해야 그 범위가 완전 수집이 된다.
+//
+// 응답 필드 중 items / errors / fxRates / sitesTotal / sitesOk / sitesFailed 는
+// 기존 화면 호환을 위해 유지한다. sites* 는 "이번 조각에서 처리한 소스 수"다.
 
 const targets = require("../config/targets.json");
 const { loadConfig, landedCost } = require("./_lib/landedCost");
+const { normalizeProduct } = require("./_lib/shopify");
+const sourcesLib = require("../web/shared/sources.js");
+const schema = require("../web/shared/schema.js");
+const brands = require("../web/shared/brands.js");
 
 const FETCH_TIMEOUT_MS = 8000;
+const BUDGET_MS = 45000; // 전체 처리 예산 (서버리스 실행시간 안에서 끝낸다)
 const PRODUCTS_PER_PAGE = 250; // Shopify products.json이 허용하는 최대 limit
-const MAX_PAGES_PER_SITE = 4;  // 사이트당 최대 조회 페이지 (최대 1000개 상품까지 순회)
-const MAX_ITEMS_PER_SITE = 25; // 사이트당 세일 상품 상위 N개만 (응답 크기 제한). 프론트는 20개씩 "다음" 버튼으로 나눠 보여준다
+const MAX_PAGES_PER_SOURCE = 8; // 한 소스에서 이어받을 수 있는 최대 페이지 (cursor 검증용)
+const MAX_ITEMS_PER_CHUNK = 25; // 브랜드 미지정 스캔의 응답 크기 제한 (지정 스캔은 캡 없음)
 
-// 무게 실측치가 없을 때 쓰는 카테고리 평균 추정값. 관세·환율 수치가 아니라
-// 배송비 계산용 보정값이라 cost.yaml이 아니라 여기서 관리한다.
-const DEFAULT_WEIGHT_KG = { apparel: 0.8, shoes: 1.3, bag: 1.1, watch: 0.4, accessory: 0.4, default: 0.8 };
+const S = schema.SOURCE_STATUS;
+const { sources: SOURCES, errors: SOURCE_ERRORS } = sourcesLib.loadSources(targets);
 
-async function fetchWithTimeout(url) {
+/** HTTP 응답/예외를 수집 상태로 분류한다. 200인데 HTML이 오는 경우도 성공 0건으로 뭉개지 않는다. */
+function classifyHttp(status, bodyHint) {
+  if (status === 401 || status === 403) return S.BLOCKED;
+  if (status === 404 || status === 410) return S.UNSUPPORTED_ENDPOINT;
+  if (status === 429) return S.RATE_LIMITED;
+  if (status >= 500) return S.HTTP_ERROR;
+  if (status >= 400) return S.HTTP_ERROR;
+  if (bodyHint === "challenge") return S.BLOCKED;
+  if (bodyHint === "html") return S.RENDER_REQUIRED;
+  return S.PARSE_ERROR;
+}
+
+class FetchProblem extends Error {
+  constructor(status, httpStatus, message, extra) {
+    super(message);
+    this.status = status;
+    this.httpStatus = httpStatus || null;
+    Object.assign(this, extra || {});
+  }
+}
+
+async function fetchJson(url) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  let res;
+  try {
+    res = await fetch(url, {
+      signal: controller.signal,
+      headers: { "User-Agent": "Mozilla/5.0 (compatible; family-sourcing-radar/1.0)", Accept: "application/json" },
+    });
+  } catch (err) {
+    const aborted = err && (err.name === "AbortError" || /abort/i.test(String(err.message)));
+    throw new FetchProblem(aborted ? S.TIMEOUT : S.HTTP_ERROR, null, aborted ? "요청 시간 초과" : String(err && err.message), {
+      stage: "fetch",
+    });
+  } finally {
+    clearTimeout(timer);
+  }
+
+  const text = await res.text().catch(() => "");
+  if (!res.ok) {
+    throw new FetchProblem(classifyHttp(res.status), res.status, `HTTP ${res.status}`, {
+      stage: "fetch",
+      retryAfter: res.headers && res.headers.get ? res.headers.get("retry-after") : null,
+    });
+  }
+
+  const head = text.slice(0, 400).toLowerCase();
+  if (/captcha|cf-chl|are you a human|access denied|incapsula/.test(head)) {
+    throw new FetchProblem(S.BLOCKED, res.status, "봇 차단 화면이 돌아옴", { stage: "parse" });
+  }
+  if (/^\s*<!doctype|^\s*<html/.test(head)) {
+    // 200인데 HTML이면 JSON 엔드포인트가 없는 것 — 성공 0건이 아니다
+    throw new FetchProblem(S.RENDER_REQUIRED, res.status, "JSON이 아니라 HTML이 돌아옴", { stage: "parse" });
+  }
+
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch (err) {
+    throw new FetchProblem(S.PARSE_ERROR, res.status, `JSON 파싱 실패: ${String(err.message).slice(0, 80)}`, { stage: "parse" });
+  }
+  if (!data || typeof data !== "object" || !Array.isArray(data.products)) {
+    // products 배열이 없는 정상 JSON도 "성공 0건"이 아니다(리뷰 R03)
+    throw new FetchProblem(S.PARSE_ERROR, res.status, "응답에 products 배열이 없음", { stage: "parse" });
+  }
+  return data;
+}
+
+// 스캔 시점 실시간 환율. 키가 필요 없는 무료 API(유럽중앙은행 기반)를 쓴다.
+async function fetchLiveFxRates() {
+  const data = await fetchJsonPlain("https://api.frankfurter.dev/v1/latest?base=KRW&symbols=USD,EUR,JPY");
+  const r = data && data.rates;
+  if (!r || !r.USD || !r.EUR || !r.JPY) throw new Error("환율 응답 형식 이상");
+  return { rates: { USD: 1 / r.USD, EUR: 1 / r.EUR, JPY: 1 / r.JPY }, asOf: data.date || null };
+}
+
+async function fetchJsonPlain(url) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   try {
-    const res = await fetch(url, {
-      signal: controller.signal,
-      headers: { "User-Agent": "Mozilla/5.0 (compatible; family-sourcing-radar/1.0)" },
-    });
+    const res = await fetch(url, { signal: controller.signal });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return await res.json();
   } finally {
@@ -32,231 +114,273 @@ async function fetchWithTimeout(url) {
   }
 }
 
-// 스캔 시점 실시간 환율. 키가 필요 없는 무료 API(유럽중앙은행 기반)를 쓴다.
-// 실패하면 cost.yaml의 고정값을 그대로 쓴다 — cost.yaml 주석에도 "API 주입" 옵션이 이미 적혀 있었다.
-async function fetchLiveFxRates() {
-  const data = await fetchWithTimeout("https://api.frankfurter.dev/v1/latest?base=KRW&symbols=USD,EUR,JPY");
-  const r = data.rates;
-  if (!r || !r.USD || !r.EUR || !r.JPY) throw new Error("환율 응답 형식 이상");
-  return { USD: 1 / r.USD, EUR: 1 / r.EUR, JPY: 1 / r.JPY };
+/** cursor = "<sourceId>:<page>" — 등록된 sourceId와 1~MAX 페이지만 받는다 */
+function parseCursor(raw, plan) {
+  if (!raw) return { sourceIndex: 0, page: 1 };
+  const m = String(raw).match(/^([a-z0-9-]+):(\d{1,2})$/);
+  if (!m) return { error: "cursor 형식이 올바르지 않습니다" };
+  const idx = plan.findIndex((s) => s.sourceId === m[1]);
+  if (idx < 0) return { error: `cursor의 sourceId가 이번 조회 대상에 없습니다: ${m[1]}` };
+  const page = parseInt(m[2], 10);
+  if (!(page >= 1 && page <= MAX_PAGES_PER_SOURCE)) return { error: "cursor의 페이지 번호가 범위를 벗어났습니다" };
+  return { sourceIndex: idx, page };
 }
 
-function extractSizeOptionIndex(product) {
-  if (!Array.isArray(product.options)) return null;
-  const idx = product.options.findIndex((o) => /size|사이즈/i.test(o.name || ""));
-  return idx >= 0 ? idx : null;
+function makeCursor(plan, sourceIndex, page) {
+  if (sourceIndex >= plan.length) return null;
+  return `${plan[sourceIndex].sourceId}:${page}`;
 }
 
-// product_type/제목으로 카테고리를 추정한다. 멀티브랜드 편집숍은 한 사이트 안에
-// 의류·신발·가방이 섞여 있어 site.category 하나로 고정하면 관세율(8%/13%)이 틀어진다.
-const CATEGORY_KEYWORDS = [
-  { cat: "shoes", w: /shoe|sneaker|boot|loafer|sandal|heel|slipper|mule|espadrille/i },
-  { cat: "bag", w: /\bbag\b|tote|backpack|clutch|wallet|pouch|handbag/i },
-  { cat: "watch", w: /watch/i },
-  { cat: "accessory", w: /sunglass|jewelry|jewellery|belt|scarf|\bhat\b|glove|earring|necklace/i },
-];
-function detectCategory(product, fallback) {
-  const hay = `${product.product_type || ""} ${product.title || ""}`;
-  const hit = CATEGORY_KEYWORDS.find((c) => c.w.test(hay));
-  return hit ? hit.cat : fallback;
-}
+/** 소스 하나의 한 페이지를 조회한다 */
+async function scanSourcePage(source, page, cfg, mode, opts) {
+  const url = `${source.baseUrl}/products.json?limit=${PRODUCTS_PER_PAGE}&page=${page}`;
+  const scope = opts.scope;
+  const started = Date.now();
 
-function normalizeProduct(product, site) {
-  const variants = Array.isArray(product.variants) ? product.variants : [];
-  const inStock = variants.filter((v) => v.available && parseFloat(v.price) > 0);
-  if (!inStock.length) return null;
-
-  // 세일 아니어도(환율·기본가 자체가 싼 경우) 상품탭에서 찾을 수 있어야 하므로
-  // 세일 variant가 없어도 걸러내지 않는다. onSale로 구분만 해서 넘긴다.
-  const saleVariants = inStock.filter((v) => {
-    const price = parseFloat(v.price);
-    const compareAt = parseFloat(v.compare_at_price);
-    return compareAt > 0 && compareAt > price;
-  });
-  const onSale = saleVariants.length > 0;
-  const priceBasis = onSale ? saleVariants : inStock;
-
-  const salePrice = Math.min(...priceBasis.map((v) => parseFloat(v.price)));
-  const listPrice = onSale ? Math.max(...saleVariants.map((v) => parseFloat(v.compare_at_price))) : salePrice;
-
-  const sizeIdx = extractSizeOptionIndex(product);
-  const sizeKey = sizeIdx === 0 ? "option1" : sizeIdx === 1 ? "option2" : sizeIdx === 2 ? "option3" : null;
-  const sizes = sizeKey
-    ? [...new Set(inStock.map((v) => v[sizeKey]).filter(Boolean))]
-    : [];
-
-  const category = detectCategory(product, site.category);
-  const weightGrams = inStock[0].grams;
-  const weightKg = weightGrams > 0 ? weightGrams / 1000 : DEFAULT_WEIGHT_KG[category] || DEFAULT_WEIGHT_KG.default;
-
-  const colorIdx = Array.isArray(product.options)
-    ? product.options.findIndex((o) => /colou?r|색상/i.test(o.name || ""))
-    : -1;
-  const colorKey = colorIdx === 0 ? "option1" : colorIdx === 1 ? "option2" : colorIdx === 2 ? "option3" : null;
-  const color = colorKey ? inStock[0][colorKey] || "" : "";
-
-  // 멀티브랜드 편집숍은 사이트 이름(site.brand)과 실제 제조사 브랜드(vendor)가 다르다.
-  // Shopify는 상품마다 vendor 필드로 실제 브랜드를 알려주므로, 있으면 그걸 우선한다.
-  // 브랜드 공식몰은 보통 vendor === site.brand라 이 로직으로도 그대로 맞는다.
-  const brand = (product.vendor && product.vendor.trim()) || site.brand;
-
-  return {
-    id: `${site.domain}:${product.id}`,
-    brand,
-    name: product.title,
-    sku: inStock[0].sku || String(product.id),
-    listPrice,
-    salePrice,
-    currency: site.currency,
-    region: site.region,
-    category,
-    weightKg,
-    sizes: sizes.join(" / "),
-    color,
-    imageUrls: Array.isArray(product.images) ? product.images.slice(0, 8).map((img) => img.src) : [],
-    sourceShop: site.brand, // 구입처(사이트) 이름 — brand(실제 제조사)와 다를 수 있다
-    sourceUrl: `https://${site.domain}/products/${product.handle}`,
-    onSale,
-    offRate: onSale ? Math.round((1 - salePrice / listPrice) * 100) : 0,
-  };
-}
-
-async function fetchAllProducts(base) {
-  let all = [];
-  for (let page = 1; page <= MAX_PAGES_PER_SITE; page++) {
-    const url = `${base}/products.json?limit=${PRODUCTS_PER_PAGE}&page=${page}`;
-    let data;
-    try {
-      data = await fetchWithTimeout(url);
-    } catch (err) {
-      if (page === 1) throw err; // 첫 페이지 실패는 사이트 전체 실패로 처리
-      break; // 이후 페이지 실패는 그때까지 모은 상품으로 진행
-    }
-    const products = Array.isArray(data.products) ? data.products : [];
-    if (!products.length) break;
-    all = all.concat(products);
-    if (products.length < PRODUCTS_PER_PAGE) break; // 마지막 페이지
+  let data;
+  try {
+    data = await fetchJson(url);
+  } catch (err) {
+    return {
+      items: [],
+      sourceResult: schema.makeSourceResult(source, {
+        scope,
+        status: err.status || S.HTTP_ERROR,
+        httpStatus: err.httpStatus,
+        stage: err.stage || "fetch",
+        retryAfter: err.retryAfter || null,
+        error: err.message,
+        pages: 1,
+        listingUrl: url,
+        complete: false,
+      }),
+      exhausted: true,
+    };
   }
-  return all;
-}
 
-async function scanSite(site, cfg, mode, uncapped) {
-  const base = `https://${site.domain}`;
-  const products = await fetchAllProducts(base);
+  const products = data.products;
+  const normalized = [];
+  let rejected = 0;
+  products.forEach((p) => {
+    const item = normalizeProduct(p, source);
+    if (!item) {
+      rejected++;
+      return;
+    }
+    if (opts.brandId && !brands.sameBrand(item.brandId || item.brand, opts.brandId)) return;
+    const cost = landedCost(
+      cfg,
+      {
+        price: item.salePrice,
+        currency: item.currency,
+        marketCountry: item.marketCountry,
+        region: item.region,
+        category: item.category,
+        weight_kg: item.weightKg,
+      },
+      mode
+    );
+    normalized.push(Object.assign({}, item, { cost, collectedAt: new Date().toISOString(), scopeId: null }));
+  });
 
-  const withCost = products
-    .map((p) => normalizeProduct(p, site))
-    .filter(Boolean)
-    .map((item) => {
-      const cost = landedCost(
-        cfg,
-        {
-          price: item.salePrice,
-          currency: item.currency,
-          region: item.region,
-          category: item.category,
-          weight_kg: item.weightKg,
-        },
-        mode
-      );
-      return { ...item, cost };
-    });
+  const onSale = normalized.filter((it) => it.listPrice > it.salePrice).sort((a, b) => b.offRate - a.offRate);
+  const regular = normalized
+    .filter((it) => !(it.listPrice > it.salePrice))
+    .sort((a, b) => (a.cost.totalKrw || Infinity) - (b.cost.totalKrw || Infinity));
 
-  const onSaleItems = withCost.filter((it) => it.onSale).sort((a, b) => b.offRate - a.offRate);
-  const regularItems = withCost.filter((it) => !it.onSale).sort((a, b) => a.cost.totalKrw - b.cost.totalKrw);
+  let items = [...onSale, ...regular];
+  let capped = false;
+  if (!opts.uncapped && items.length > MAX_ITEMS_PER_CHUNK) {
+    const saleSlots = Math.ceil(MAX_ITEMS_PER_CHUNK * 0.7);
+    items = [...onSale.slice(0, saleSlots), ...regular.slice(0, MAX_ITEMS_PER_CHUNK - saleSlots)];
+    capped = true;
+  }
 
-  // 브랜드를 지정해 찾아온 경우(?brand=)는 캡 없이 그 사이트 전체를 돌려준다 —
-  // "이 브랜드에서 뭐가 있는지 전부 보고 싶다"는 요청이라 할인율/저가 우선순위로
-  // 걸러내면 안 된다. 지정 없는 일반 스캔은 응답 크기 때문에 사이트당 상위 N개만 남긴다.
-  if (uncapped) return [...onSaleItems, ...regularItems];
+  // 이 페이지가 마지막인지 — 250개 미만이면 더 없다
+  const exhausted = products.length < PRODUCTS_PER_PAGE || page >= MAX_PAGES_PER_SOURCE;
 
-  const saleSlots = Math.ceil(MAX_ITEMS_PER_SITE * 0.7);
-  const regularSlots = MAX_ITEMS_PER_SITE - saleSlots;
-  return [...onSaleItems.slice(0, saleSlots), ...regularItems.slice(0, regularSlots)];
+  const sourceResult = schema.makeSourceResult(source, {
+    scope,
+    status: products.length === 0 ? S.EMPTY : capped ? S.PARTIAL : S.OK,
+    httpStatus: 200,
+    stage: null,
+    discovered: products.length,
+    fetched: products.length,
+    accepted: items.length,
+    rejected: rejected + (normalized.length - items.length),
+    pages: 1,
+    listingUrl: url,
+    complete: false, // 완전 수집 판정은 cursor를 끝까지 소비한 웹/CLI가 한다
+    error: capped ? `응답 크기 제한으로 이 페이지에서 ${MAX_ITEMS_PER_CHUNK}건만 반환했습니다` : null,
+  });
+  sourceResult.durationMs = Date.now() - started;
+
+  const scopeId = schema.scopeKey(sourceResult);
+  items.forEach((it) => {
+    it.scopeId = scopeId;
+  });
+
+  return { items, sourceResult, exhausted };
 }
 
 module.exports = async function handler(req, res) {
-  const mode = req.query && (req.query.mode === "business" ? "business" : "proxy");
-  const brandFilter = req.query && req.query.brand ? String(req.query.brand).trim() : "";
-  const onlyPopular = req.query && req.query.onlyPopular === "1";
+  const q = (req && req.query) || {};
+  const mode = q.mode === "business" ? "business" : "proxy";
+  const brandInput = q.brand ? String(q.brand).trim() : "";
+  const brandId = brandInput ? brands.canonicalBrandId(brandInput) || brandInput.toLowerCase() : "";
+  const onlyPopular = q.onlyPopular === "1";
+  const sourceIdParam = q.sourceId ? String(q.sourceId).trim() : "";
+  const marketCountry = q.marketCountry ? String(q.marketCountry).trim().toUpperCase() : "";
+
   const cfg = loadConfig();
 
-  let fxSource = "cost.yaml 고정값";
-  try {
-    const liveFx = await fetchLiveFxRates();
-    cfg.fx.base_rate = { ...cfg.fx.base_rate, ...liveFx };
-    fxSource = "실시간(frankfurter.dev, ECB 기준)";
-  } catch (e) {
-    // 환율 API가 막히거나 실패하면 cost.yaml 고정값으로 계속 진행한다
-  }
-
-  const allSites = [...targets.sites, ...(targets.sites_multi_brand || [])];
-  // verified:"blocked"는 실제 배포 스캔에서 403/404/410/503 등으로 확인된 사이트다.
-  // 매번 다시 시도해도 결과가 같으므로 스캔 대상에서 제외해 타임아웃 예산을 아낀다.
-  let sites = allSites.filter((s) => s.platform === "shopify" && s.verified !== "blocked");
-  let uncapped = false;
-
-  if (brandFilter) {
-    // "확인" 버튼으로 특정 브랜드를 지정한 경우 — 그 브랜드가 나올 수 있는 사이트를
-    // 전부 훑어서 합친다: ① 공식몰(지역별로 여러 개일 수 있다 — 예: Sandro/Sandro EU)
-    // ② 멀티브랜드 편집숍(vendor로 이 브랜드가 섞여 있을 수 있다). 한 곳만 보면
-    // 그 사이트가 막혀 있을 때 아예 결과가 안 나오니, 여러 사이트에서 모아 교차 확인한다.
-    sites = [...sites, ...(targets.sites_multi_brand || []).filter((s) => s.platform === "shopify")];
-    uncapped = true;
-  } else if (onlyPopular) {
-    // "Sale중" 탭 전용 — 대중적으로 잘 알려진 브랜드만 스캔해서 세일 신호의 노이즈를 줄인다.
-    sites = sites.filter((s) => s.popular === true);
-  }
-
-  const results = await Promise.allSettled(
-    sites.map((site) => scanSite(site, cfg, mode, uncapped))
-  );
-
-  let items = [];
-  const errors = [];
-  results.forEach((r, i) => {
-    const site = sites[i];
-    if (r.status === "fulfilled") {
-      items.push(...r.value);
-    } else {
-      errors.push({ brand: site.brand, domain: site.domain, error: String(r.reason && r.reason.message || r.reason) });
-    }
+  // 조회 대상 계획 — 브랜드를 지정하면 그 브랜드의 공식몰 + 편집숍만 본다
+  const plan = sourcesLib.selectSources(SOURCES, {
+    runtime: "server",
+    adapters: ["shopify-products-json"],
+    brandId: brandId || null,
+    onlyPopular,
+    sourceIds: sourceIdParam ? [sourceIdParam] : null,
+    marketCountries: marketCountry ? [marketCountry] : null,
   });
 
-  if (brandFilter) {
-    // 여러 사이트를 합쳐서 긁어왔으니, 실제 상품 브랜드(vendor 우선 판별된 값)가
-    // 지정한 브랜드와 일치하는 것만 남긴다. "Sandro EU"처럼 지역 접미사가 붙은
-    // 사이트명도 잡히도록 접두어 일치까지 허용한다.
-    const bf = brandFilter.toLowerCase();
-    items = items.filter((it) => {
-      const b = it.brand.toLowerCase();
-      return b === bf || b.startsWith(bf + " ");
+  if (!plan.length) {
+    res.status(200).json({
+      schemaVersion: schema.SCHEMA_VERSION,
+      scannedAt: new Date().toISOString(),
+      mode,
+      chunk: true,
+      nextCursor: null,
+      plannedSources: [],
+      sourceResults: [],
+      sitesTotal: 0,
+      sitesOk: 0,
+      sitesFailed: 0,
+      itemCount: 0,
+      brandSummary: {},
+      items: [],
+      errors: [],
+      fxRates: { USD: cfg.fx.base_rate.USD, EUR: cfg.fx.base_rate.EUR, JPY: cfg.fx.base_rate.JPY },
+      fxSource: "cost.yaml 고정값",
+      configErrors: SOURCE_ERRORS,
+      note: sourceIdParam ? "요청한 sourceId가 등록돼 있지 않거나 차단 상태입니다" : "조건에 맞는 판매처가 없습니다",
     });
+    return;
   }
 
-  items.sort((a, b) => b.offRate - a.offRate);
+  const cursor = parseCursor(q.cursor, plan);
+  if (cursor.error) {
+    res.status(400).json({ error: cursor.error });
+    return;
+  }
 
-  // "Sale중" 탭 요약은 실제로 세일 중인 상품만 센다 — 정가 상품이 섞이면 세일 집계가 왜곡된다.
+  // 환율은 첫 조각에서만 가져온다 (조각마다 외부 API를 때리지 않는다)
+  let fxSource = "cost.yaml 고정값";
+  let fxAsOf = (cfg.fx && cfg.fx.as_of) || null;
+  if (!q.cursor) {
+    try {
+      const live = await fetchLiveFxRates();
+      cfg.fx.base_rate = Object.assign({}, cfg.fx.base_rate, live.rates);
+      fxSource = "실시간(frankfurter.dev, ECB 기준)";
+      fxAsOf = live.asOf || fxAsOf;
+    } catch (e) {
+      // 환율 API가 막히면 cost.yaml 고정값으로 계속 진행한다
+    }
+  }
+
+  const scope = brandId
+    ? { kind: "brand", value: brandId }
+    : onlyPopular
+    ? { kind: "popular", value: null }
+    : { kind: "listing", value: null };
+
+  const started = Date.now();
+  const items = [];
+  const sourceResults = [];
+  const errors = [];
+
+  let sourceIndex = cursor.sourceIndex;
+  let page = cursor.page;
+  let nextCursor = null;
+
+  // 예산 안에서 가능한 만큼 처리하되, 기본은 "한 소스의 한 페이지"다.
+  while (sourceIndex < plan.length) {
+    const source = plan[sourceIndex];
+    const result = await scanSourcePage(source, page, cfg, mode, {
+      brandId: brandId || null,
+      uncapped: !!(brandId || sourceIdParam),
+      scope,
+    });
+
+    items.push(...result.items);
+    sourceResults.push(result.sourceResult);
+    if (result.sourceResult.status !== S.OK && result.sourceResult.status !== S.EMPTY) {
+      errors.push({
+        sourceId: source.sourceId,
+        brand: source.shopName,
+        domain: source.domain,
+        status: result.sourceResult.status,
+        httpStatus: result.sourceResult.httpStatus,
+        error: result.sourceResult.error,
+      });
+    }
+
+    if (result.exhausted) {
+      sourceIndex += 1;
+      page = 1;
+      // sourceId를 지정한 호출은 그 판매처 안에서만 진행한다
+      if (sourceIdParam) break;
+    } else {
+      page += 1;
+    }
+
+    nextCursor = makeCursor(plan, sourceIndex, page);
+    break; // 호출당 한 페이지 — 나머지는 웹이 cursor로 이어서 요청한다
+  }
+
+  if (sourceIndex >= plan.length) nextCursor = null;
+
   const brandSummary = {};
-  items.filter((it) => it.onSale).forEach((it) => {
-    brandSummary[it.brand] = (brandSummary[it.brand] || 0) + 1;
-  });
+  items
+    .filter((it) => it.listPrice > it.salePrice)
+    .forEach((it) => {
+      const label = brands.brandLabel(it.brandId, it.brand);
+      brandSummary[label] = (brandSummary[label] || 0) + 1;
+    });
 
   res.status(200).json({
+    schemaVersion: schema.SCHEMA_VERSION,
     scannedAt: new Date().toISOString(),
+    collectedAt: new Date().toISOString(),
     mode,
-    fxRates: { USD: cfg.fx.base_rate.USD, EUR: cfg.fx.base_rate.EUR, JPY: cfg.fx.base_rate.JPY },
-    fxSource,
-    sitesTotal: sites.length,
-    sitesOk: sites.length - errors.length,
+    chunk: true,
+    nextCursor,
+    plannedSources: plan.map((s) => ({
+      sourceId: s.sourceId,
+      shopName: s.shopName,
+      marketCountry: s.marketCountry,
+      kind: s.kind,
+    })),
+    scope,
+    sourceResults,
+    // 아래 세 값은 "이번 조각에서 처리한 소스 수"다. 전체 진행률은 웹이 누적한다.
+    sitesTotal: sourceResults.length,
+    sitesOk: sourceResults.filter((r) => r.status === S.OK || r.status === S.EMPTY).length,
     sitesFailed: errors.length,
     itemCount: items.length,
     brandSummary,
     items,
     errors,
+    fxRates: { USD: cfg.fx.base_rate.USD, EUR: cfg.fx.base_rate.EUR, JPY: cfg.fx.base_rate.JPY },
+    fxSource,
+    fxAsOf,
+    elapsedMs: Date.now() - started,
+    budgetMs: BUDGET_MS,
   });
 };
 
-// 테스트용 노출 (Vercel은 module.exports가 함수면 그대로 핸들러로 쓰므로 영향 없다)
-module.exports.normalizeProduct = normalizeProduct;
-module.exports.scanSite = scanSite;
+// 테스트용 노출 (Vercel은 module.exports가 함수면 그대로 핸들러로 쓴다)
+module.exports.scanSourcePage = scanSourcePage;
+module.exports.parseCursor = parseCursor;
+module.exports.classifyHttp = classifyHttp;
+module.exports.SOURCES = SOURCES;

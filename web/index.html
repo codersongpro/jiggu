@@ -352,9 +352,13 @@ nav button.on .dot{opacity:1}
       </div>
       <div class="brandSuggest" id="brandSuggest"></div>
       <div class="dropRow">
-        <select id="fBrandSel"><option value="">브랜드 전체</option></select>
-        <select id="fTypeSel"><option value="">종류 전체</option></select>
-        <select id="fPriceSel"><option value="">가격대 전체</option></select>
+        <select id="fBrandSel" aria-label="브랜드"><option value="">브랜드 전체</option></select>
+        <select id="fTypeSel" aria-label="종류"><option value="">종류 전체</option></select>
+        <select id="fPriceSel" aria-label="가격대"><option value="">가격대 전체</option></select>
+      </div>
+      <div class="dropRow">
+        <select id="fCountrySel" aria-label="국가"><option value="">국가 전체</option></select>
+        <select id="fSourceSel" aria-label="판매처"><option value="">판매처 전체</option></select>
       </div>
       <div class="dropRow">
         <select id="fSortSel">
@@ -366,7 +370,7 @@ nav button.on .dot{opacity:1}
         <button class="btn primary" id="dropConfirmBtn" style="flex:2">확인</button>
       </div>
       <div class="parsed" id="parsed"></div>
-      <p class="hint" id="hint">브랜드를 고르고 확인을 누르면 그 브랜드 상품을 전부 찾아옵니다. 비워두고 확인하면 전체에서 추천을 골라줍니다.</p>
+      <p class="hint" id="hint">필터는 이미 가져온 상품에 바로 적용됩니다. '확인'을 누르면 그 조건으로 서버에서 새로 찾아옵니다.</p>
     </div>
     <div class="filterbar" id="filterBar"></div>
     <div class="reshead"><h2 id="resTitle"></h2><span id="resCount"></span></div>
@@ -406,16 +410,29 @@ nav button.on .dot{opacity:1}
       </div>
     </div>
     <div class="sect">
-      <h3>로컬 크롤링 결과 가져오기</h3>
-      <p class="note">Shopify가 아닌 사이트(REI 등)는 PC에서 <code>node scripts/local-crawler/crawl.js</code>를
-      돌려서 수집합니다. 만들어진 JSON 파일을 여기서 열면 상품 탭 목록에 합쳐집니다.</p>
+      <h3>수집 결과 가져오기</h3>
+      <p class="note">Shopify가 아닌 사이트(REI·BEAMS 등)는 PC에서
+      <code>npm run crawl -- --source rei-us --limit 20 --output output/rei-us.json</code>으로 수집하고,
+      제휴 피드는 <code>npm run feed-import -- &lt;피드파일&gt;</code>으로 변환합니다.
+      만들어진 JSON을 여기서 열면 상품 탭 목록에 <b>합쳐집니다</b> — 다른 판매처·브랜드로 이미
+      가져온 상품은 지워지지 않습니다. 형식이 맞지 않으면 반영 전에 거부하고 기존 데이터를 유지합니다.</p>
       <input type="file" id="importFile" accept="application/json" style="margin-top:10px">
       <p class="note" id="importResult" style="display:none"></p>
+      <div class="btnrow"><button class="btn" id="clearData">가져온 상품 목록 비우기</button></div>
+    </div>
+    <div class="sect">
+      <h3>계산 설정</h3>
+      <p class="note" id="cfgStatus">계산 설정을 불러오는 중…</p>
+      <p class="note">세율·관세·배대지 요율은 서버의 <code>config/cost.yaml</code>에서만 관리합니다
+      (<code>/api/config</code>로 받아 씁니다). 세금·배송 조건이 검증되지 않은 시장(예: 영국)은
+      원문 가격만 표시하고 원가는 "계산 미완료"로 남습니다.</p>
     </div>
     <div class="sect">
       <h3>연결 상태</h3>
       <p class="note">'Sale중' 탭의 스캔 버튼을 누르면 <code>/api/scan</code>이 config/targets.json에 등록된
-      브랜드몰들을 실시간으로 조회합니다. 상품명은 영문 원문 그대로 표시되니 게시글 작성 시 다듬어 쓰세요.
+      판매처를 <b>한 번에 한 곳의 한 페이지씩</b> 조회하고, 화면이 다음 위치(cursor)를 따라가며 이어붙입니다.
+      끝까지 이어받은 범위만 "완전 수집"으로 처리하므로 중간에 실패해도 기존 목록이 지워지지 않습니다.
+      상품명은 영문 원문 그대로 표시되니 게시글 작성 시 다듬어 쓰세요.
       전일 대비 세일 변화(신호)는 스캔 기록이 쌓여야 표시할 수 있어 이번 버전에서는 제공하지 않습니다.</p>
     </div>
   </section>
@@ -466,144 +483,293 @@ nav button.on .dot{opacity:1}
 
 <div class="toast" id="toast"></div>
 
+<!-- 서버와 같은 계산·정규화 모듈 (web/shared → /shared 로 서빙된다) -->
+<script src="shared/money.js"></script>
+<script src="shared/urls.js"></script>
+<script src="shared/brands.js"></script>
+<script src="shared/offers.js"></script>
+<script src="shared/schema.js"></script>
+<script src="shared/merge.js"></script>
+<script src="shared/cost.js"></script>
 <script>
 /* ============================================================
-   설정 — 서버의 cost.yaml과 같은 값을 쓴다
+   핫딜 레이더 — 화면 로직
+   계산·정규화·병합은 shared/ 모듈(서버와 같은 코드)을 쓴다.
+   여기에는 세율·배송 요율표를 다시 하드코딩하지 않는다(리뷰 R12).
    ============================================================ */
-const CFG = {
-  cardFee: 0.025,
-  fx: {USD:1380, EUR:1490, JPY:9.2},
-  localTax: {US:{rate:0, included:false}, EU:{rate:0.22, included:true}, JP:{rate:0.10, included:true}},
-  ship: {US:[[0.5,12000],[1,17000],[2,26000],[3,34000],[5,50000]],
-         EU:[[0.5,15000],[1,21000],[2,33000],[3,44000],[5,66000]],
-         JP:[[0.5,8000],[1,11000],[2,16000],[3,21000],[5,31000]]},
-  handling: 2000,
-  duty: {apparel:0.13, shoes:0.13, bag:0.08, accessory:0.08, watch:0.08},
-  vat: 0.10,
-  exempt: {US:200, EU:150, JP:150},
-  mode: 'proxy',
-  markup: 1.6
-};
+const Money = window.JigguMoney;
+const Urls = window.JigguUrls;
+const Brands = window.JigguBrands;
+const Offers = window.JigguOffers;
+const Schema = window.JigguSchema;
+const Merge = window.JigguMerge;
+const CostLib = window.JigguCost;
 
-const BRAND_KR = {
-  // 컨템포러리 여성복
-  'Lacoste':'라코스테', 'Theory':'띠어리', 'Zadig&Voltaire':'쟈딕앤볼테르',
-  'Sandro':'산드로', 'Maje':'마쥬', 'Ganni':'가니', 'AllSaints':'올세인츠',
-  'Reiss':'리스', 'Vince':'빈스', 'Max Mara':'막스마라', 'Free People':'프리피플',
-  'Polo Ralph Lauren':'폴로 랄프로렌', 'COS':'코스', 'Isabel Marant':'이자벨마랑',
-  // 가방·액세서리
-  'Coach':'코치', 'Tory Burch':'토리버치', 'Marc Jacobs':'마크제이콥스',
-  'Kate Spade':'케이트스페이드', 'Michael Kors':'마이클코어스',
-  'Longchamp':'롱샴', 'Ferragamo':'페라가모',
-  // 신발
-  'New Balance':'뉴발란스', 'Golden Goose':'골든구스', 'Ugg':'어그',
-  'Hoka':'호카', 'On Running':'온러닝', 'Salomon':'살로몬', 'Veja':'베자',
-  // 아웃도어·애슬레저
-  'Arc\u2019teryx':'아크테릭스', 'Patagonia':'파타고니아', 'Lululemon':'룰루레몬',
-  'Barbour':'바버', 'Carhartt WIP':'칼하트',
-  // config/targets.json 스캔 대상 브랜드
-  'Reformation':'레포메이션', 'Kith':'키스', 'Fashion Nova':'패션노바',
-  'Nasty Gal':'나스티갤', 'Princess Polly':'프린세스폴리', 'Gymshark':'짐샤크',
-  'Allbirds':'올버즈', 'Rothy’s':'로시스', 'Rebecca Minkoff':'레베카민코프',
-  'MVMT':'무브먼트', 'Girlfriend Collective':'걸프렌드컬렉티브',
-  'Outdoor Voices':'아웃도어보이시스', 'Cuyana':'쿠야나', 'Naadam':'나담',
-  'M.Gemi':'엠제미', 'Marine Layer':'마린레이어', 'Faherty':'파허티', 'Kotn':'코튼',
-  'Coach Outlet':'코치 아울렛', 'Kate Spade Outlet':'케이트스페이드 아울렛',
-  'Bandier':'밴디어', 'Verishop':'베리샵', 'The Webster':'더웹스터', 'Kirna Zabete':'키르나자베트',
-  'Aritzia':'아리치아', 'Anine Bing':'아닌빙', 'Stussy':'스투시', 'Staud':'스토드',
-  'Self-Portrait':'셀프포트레이트', 'Sezane':'세잔느', 'Rouje':'루쥬',
-  'Bombas':'봄바스', 'MeUndies':'미언디스', 'Stance':'스탠스', 'Cotopaxi':'코토팍시',
-  'Vuori':'부오리', 'Chubbies':'처비스', 'Untuckit':'언턱잇', 'ThirdLove':'써드러브',
-  'Taylor Stitch':'테일러스티치', 'Rowing Blazers':'로잉블레이저스', 'Birdies':'버디스'
-};
+/* 사용자 설정 — 요율이 아니라 '내가 고르는 값'만 여기 둔다 */
+const SETTINGS = { mode: 'proxy', markup: 1.6, fxOverride: {} };
+
+/* 서버(GET /api/config)에서 받는 계산 설정. 못 받으면 원가는 '계산 미완료'로 표시된다. */
+let COST_CFG = null;
+let COST_CFG_ERROR = null;
 
 /* ============================================================
-   스캔 데이터 — /api/scan 을 호출해 채운다. 초기값은 빈 배열.
+   상태 — Sale중 탭과 상품탭은 완전히 분리돼 있다(서로의 상태를 덮어쓰지 않음)
    ============================================================ */
+let PRODUCT_STATE = Merge.emptyState();   // 상품탭
+let SIGNAL_STATE = Merge.emptyState();    // Sale중 탭
 let SIGNALS = [];
-let SIGNAL_ITEMS = []; // Sale중 스캔의 실제 상품들 — 브랜드 행 클릭시 재조회 없이 여기서 꺼내 보여준다
-let ITEMS = [];
-// Sale중 탭과 상품탭은 완전히 다른 스캔으로 동작한다(서로의 상태를 덮어쓰지 않음).
-let lastSignalScanMeta = null; // Sale중 탭 — 인기 브랜드만 스캔
-let lastProductScanMeta = null; // 상품탭 — 확인 버튼으로 지정 브랜드 전체 또는 전체 브랜드 스캔
+let lastSignalScanMeta = null;
+let lastProductScanMeta = null;
+let query = '';
+let curItem = null;
+let selImgs = new Set();
 
-/* 최저가 구입처 자동 선택 */
-function bestSource(it){
-  return it.sources.reduce((a,b) => b.price < a.price ? b : a);
+const $ = s => document.querySelector(s);
+const ITEMS = () => PRODUCT_STATE.items;
+
+/* ---------- DOM 헬퍼 (외부 문자열은 항상 textContent로 넣는다 — 리뷰 R10) ---------- */
+function el(tag, opts, children){
+  const node = document.createElement(tag);
+  const o = opts || {};
+  if(o.class) node.className = o.class;
+  if(o.text !== undefined) node.textContent = String(o.text);
+  if(o.style) node.setAttribute('style', o.style);
+  if(o.attrs) Object.entries(o.attrs).forEach(([k,v]) => { if(v !== null && v !== undefined) node.setAttribute(k, String(v)); });
+  if(o.on) Object.entries(o.on).forEach(([k,v]) => node.addEventListener(k, v));
+  (children || []).forEach(c => { if(c) node.appendChild(c); });
+  return node;
 }
+function clear(node){ while(node.firstChild) node.removeChild(node.firstChild); }
+function fill(node, children){ clear(node); (children || []).forEach(c => { if(c) node.appendChild(c); }); }
 
-const MATCH_LABEL = {
-  sku:   {t:'품번 일치', c:'high'},
-  image: {t:'이미지 일치', c:'high'},
-  name:  {t:'이름 유사 — 확인 필요', c:''},
-  single:{t:'단일 몰 수집 — 교차 확인 안 됨', c:''}
-};
+/* ---------- 표시 헬퍼 ---------- */
+const won = n => (n === null || n === undefined) ? '-' : Math.round(n).toLocaleString('ko-KR');
+const cur = (v, c) => Money.formatMoney(v, c);
+const brandLabel = it => Brands.brandLabel(it.brandId, it.brand);
+const isStale = it => Merge.isStale(it);
 
 /* ============================================================
-   원가 계산 — landed_cost.py와 동일한 로직
+   원가 계산 — shared/cost.js (서버와 동일). 설정은 /api/config에서 받는다.
    ============================================================ */
-function fxRate(cur){ return CFG.fx[cur] * (1 + CFG.cardFee); }
-
-function shipKRW(w, region){
-  const t = CFG.ship[region];
-  for(const [lim, fee] of t) if(w <= lim) return fee + CFG.handling;
-  const last = t[t.length-1];
-  return last[1] + (w - last[0]) * 11000 + CFG.handling;
+function costCfg(){
+  if(!COST_CFG) return null;
+  // 설정 탭에서 환율을 직접 바꿨으면 그 값만 덮어쓴다
+  const cfg = JSON.parse(JSON.stringify(COST_CFG));
+  Object.entries(SETTINGS.fxOverride).forEach(([k, v]) => { if(v > 0) cfg.fx.base_rate[k] = v; });
+  return cfg;
 }
-
-function landed(item){
-  const t = CFG.localTax[item.region];
-  let local = item.sale;
-  const notes = [];
-  if(t.included){
-    local = local / (1 + t.rate);
-    notes.push(`${item.region} 부가세 ${Math.round(t.rate*100)}% 차감`);
-  } else if(t.rate > 0){
-    local = local * (1 + t.rate);
-  } else {
-    notes.push('면세 州 배대지 기준');
+function landed(it){
+  const cfg = costCfg();
+  if(!cfg){
+    return {status:'incomplete', totalKrw:null,
+      incompleteReason: COST_CFG_ERROR || '계산 설정을 아직 불러오지 못했습니다', notes:[]};
   }
-  const itemKRW = local * fxRate(item.cur);
-  const ship = shipKRW(item.w, item.region);
-  const dutiable = itemKRW + ship;
-  const dutiableUSD = dutiable / CFG.fx.USD;
-
-  let duty = 0, vat = 0, free = false;
-  if(CFG.mode === 'proxy' && dutiableUSD <= CFG.exempt[item.region]){
-    free = true;
-    notes.push(`면세 적용 ($${Math.round(dutiableUSD)} ≤ $${CFG.exempt[item.region]})`);
-  } else {
-    const dr = CFG.duty[item.cat] || 0.13;
-    duty = dutiable * dr;
-    vat = (dutiable + duty) * CFG.vat;
-    if(CFG.mode === 'proxy') notes.push(`면세한도 초과 → 전체 금액 과세`);
-    else notes.push('사업자 통관 — 면세한도 없음');
-  }
-  const total = itemKRW + ship + duty + vat;
-  return {itemKRW, ship, duty, vat, total, dutiableUSD, free, notes};
+  return CostLib.landedCost(cfg, {
+    price: it.salePrice, currency: it.currency,
+    marketCountry: it.marketCountry, region: it.region,
+    category: it.category, weight_kg: it.weightKg
+  }, SETTINGS.mode);
 }
+const costTotal = it => { const c = landed(it); return c.status === 'ok' ? c.totalKrw : null; };
 
-const won = n => Math.round(n).toLocaleString('ko-KR');
-const cur = (v, c) => c === 'USD' ? '$'+v : c === 'EUR' ? '€'+v : '¥'+v;
-const off = it => Math.round((1 - it.sale/it.list) * 100);
+async function loadCostConfig(){
+  try{
+    const res = await fetch('/api/config');
+    if(!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    if(!data || !data.config || !data.config.fx) throw new Error('형식 이상');
+    COST_CFG = data.config;
+    COST_CFG_ERROR = null;
+    if(!SETTINGS.fxOverride.USD) $('#fxUSD').value = COST_CFG.fx.base_rate.USD;
+    if(!SETTINGS.fxOverride.EUR) $('#fxEUR').value = COST_CFG.fx.base_rate.EUR;
+    $('#cfgStatus').textContent = `계산 설정 기준일: ${data.configAsOf || '미상'}`;
+  }catch(e){
+    COST_CFG_ERROR = '계산 설정(/api/config)을 불러오지 못해 원가를 계산할 수 없습니다: ' + e.message;
+    $('#cfgStatus').textContent = COST_CFG_ERROR;
+  }
+}
 
 /* ============================================================
-   게시글 생성 — 제목 규칙은 기존 카페 글 형식을 따른다
+   저장 — 가져온 상품과 마지막 정상 결과를 IndexedDB에 남긴다.
+   저장에 실패해도 기존 저장본은 건드리지 않는다.
+   ============================================================ */
+const DB_NAME = 'radar-db', STORE = 'state';
+function openDb(){
+  return new Promise((resolve, reject) => {
+    if(!window.indexedDB) return reject(new Error('IndexedDB 미지원'));
+    const req = indexedDB.open(DB_NAME, 1);
+    req.onupgradeneeded = () => { if(!req.result.objectStoreNames.contains(STORE)) req.result.createObjectStore(STORE); };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error || new Error('DB 열기 실패'));
+  });
+}
+async function dbPut(key, value){
+  const db = await openDb();
+  await new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE, 'readwrite');
+    tx.objectStore(STORE).put(value, key);
+    tx.oncomplete = resolve;
+    tx.onerror = () => reject(tx.error);
+  });
+  db.close();
+}
+async function dbGet(key){
+  const db = await openDb();
+  const value = await new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE, 'readonly');
+    const req = tx.objectStore(STORE).get(key);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+  db.close();
+  return value;
+}
+async function saveState(){
+  try{
+    await dbPut('products', {items: PRODUCT_STATE.items, sourceResults: PRODUCT_STATE.sourceResults, updatedAt: PRODUCT_STATE.updatedAt});
+    await dbPut('signals', {items: SIGNAL_STATE.items, sourceResults: SIGNAL_STATE.sourceResults, meta: lastSignalScanMeta});
+  }catch(e){ /* 저장 실패 시 기존 저장본을 그대로 둔다 */ }
+}
+async function restoreState(){
+  try{
+    const p = await dbGet('products');
+    if(p && Array.isArray(p.items) && p.items.length){
+      PRODUCT_STATE = {items: p.items, sourceResults: p.sourceResults || [], updatedAt: p.updatedAt || null};
+    }
+    const s = await dbGet('signals');
+    if(s && Array.isArray(s.items) && s.items.length){
+      SIGNAL_STATE = {items: s.items, sourceResults: s.sourceResults || [], updatedAt: null};
+      lastSignalScanMeta = s.meta || null;
+      SIGNALS = buildSignals(SIGNAL_STATE.items);
+    }
+  }catch(e){ /* 복원 실패는 조용히 넘어간다 — 빈 화면으로 시작 */ }
+}
+
+/* ============================================================
+   검색 — 브랜드 / 옷 종류 / 가격 중 무엇을 넣어도 걸린다
+   ============================================================ */
+const TYPES = [
+  {key:'가디건', w:['가디건','cardigan']},
+  {key:'자켓',   w:['자켓','재킷','블레이저','블레이져','jacket','blazer','coat','코트']},
+  {key:'원피스', w:['원피스','드레스','dress']},
+  {key:'니트',   w:['니트','스웨터','캐시미어','sweater','knit','cashmere']},
+  {key:'신발',   w:['신발','슈즈','로퍼','메리제인','스니커즈','부츠','loafer','shoe','sneaker','boot','mary jane']},
+  {key:'선글라스',w:['선글라스','안경','sunglass','eyewear']},
+  {key:'가방',   w:['가방','토트','백','bag','tote']},
+  {key:'팬츠',   w:['팬츠','바지','청바지','진','pant','jean','trouser']},
+  {key:'셔츠',   w:['셔츠','블라우스','폴로','shirt','blouse','polo']}
+];
+const COLOR_KR = {
+  'noir':'블랙 검정', 'black':'블랙 검정', 'ecru':'에크루 아이보리 크림',
+  'graphite':'그레이 회색 차콜', 'flour':'화이트 흰색 아이보리',
+  'rose':'로즈 핑크 분홍', 'dark brown':'브라운 갈색', 'gold/grey':'골드 그레이 회색',
+  'cream':'크림 아이보리 베이지', 'white':'화이트 흰색'
+};
+const COUNTRY_KR = {US:'미국', JP:'일본', GB:'영국', DE:'독일', FR:'프랑스', IT:'이탈리아', ES:'스페인', NL:'네덜란드', EU:'유럽'};
+const PRICE_BANDS = [
+  {label:'10만원 이하', min:0, max:100000},
+  {label:'10~20만원', min:100000, max:200000},
+  {label:'20~30만원', min:200000, max:300000},
+  {label:'30~50만원', min:300000, max:500000},
+  {label:'50만원 이상', min:500000, max:null},
+];
+
+function detectType(it){
+  const hay = (it.name || '').toLowerCase();
+  const hit = TYPES.find(t => t.w.some(w => hay.includes(w)));
+  return hit ? hit.key : '기타';
+}
+
+/* 브랜드 별칭은 shared/brands.js 하나만 본다 — 칩·드롭다운·검색이 같은 결과를 낸다 */
+const BRAND_MATCHERS = Brands.allBrands()
+  .flatMap(b => [b.kr, b.en, ...(b.aliases || [])].filter(Boolean).map(a => [b.id, a.toLowerCase()]))
+  .sort((x, y) => y[1].length - x[1].length);
+
+function parseQuery(q){
+  const r = {brandId:null, type:null, min:null, max:null, maxLocal:null, text:[]};
+  if(!q.trim()) return r;
+  let s = ' ' + q.toLowerCase().replace(/,/g, '') + ' ';
+
+  const eat = (re, fn) => { const m = s.match(re); if(m){ fn(m); s = s.replace(m[0], ' '); } };
+  eat(/(\d+)\s*[~-]\s*(\d+)\s*만원?/, m => { r.min = +m[1]*10000; r.max = +m[2]*10000; });
+  eat(/(\d+)\s*만원?\s*(이하|이내|미만|아래|밑)/, m => r.max = +m[1]*10000);
+  eat(/(\d+)\s*만원?\s*(이상|넘는|초과|위)/, m => r.min = +m[1]*10000);
+  eat(/\$\s*(\d+)\s*(이하|이내|미만)?/, m => r.maxLocal = +m[1]);
+  eat(/(\d+)\s*달러\s*(이하|이내|미만)?/, m => r.maxLocal = +m[1]);
+  eat(/(\d{5,})\s*원?\s*(이하|이내|미만)?/, m => r.max = +m[1]);
+  eat(/(\d+)\s*만원?/, m => r.max = +m[1]*10000);
+
+  // 긴 이름부터 검사한다. '라코스테'가 'COS(코스)'로 잘못 잡히는 일을 막는다.
+  for(const [id, alias] of BRAND_MATCHERS){
+    if(alias.length > 1 && s.includes(alias)){ r.brandId = id; s = s.split(alias).join(' '); break; }
+  }
+  const t = TYPES.find(t => t.w.some(w => s.includes(w)));
+  if(t){ r.type = t.key; t.w.forEach(w => s = s.replace(w, ' ')); }
+
+  r.text = s.split(/\s+/).filter(w => w.length > 1);
+  return r;
+}
+
+function matches(it, f){
+  if(f.brandId && !Brands.sameBrand(it.brandId || it.brand, f.brandId)) return false;
+  if(f.country && it.marketCountry !== f.country) return false;
+  if(f.sourceId && it.sourceId !== f.sourceId) return false;
+  if(f.type && detectType(it) !== f.type) return false;
+  if(f.min !== null && f.min !== undefined || f.max !== null && f.max !== undefined){
+    const total = costTotal(it);
+    // 원가를 계산할 수 없는 상품(예: 영국)은 원화 가격 조건으로 거르지 않고 남긴다
+    if(total !== null){
+      if(f.min && total < f.min) return false;
+      if(f.max && total > f.max) return false;
+    }
+  }
+  if(f.maxLocal && it.salePrice > f.maxLocal) return false;
+  if(f.text.length){
+    const col = (it.color || '').toLowerCase();
+    const hay = (it.name + ' ' + brandLabel(it) + ' ' + (it.brand || '') + ' ' + it.sourceShop + ' ' +
+                 col + ' ' + (COLOR_KR[col] || '')).toLowerCase();
+    if(!f.text.every(w => hay.includes(w))) return false;
+  }
+  return true;
+}
+
+/* ============================================================
+   추천 점수
+   ============================================================ */
+function scoreItem(it){
+  const c = landed(it);
+  const d = it.offRate || 0;
+  const why = [];
+  let sc = d;
+  if(d >= 40) sc += 8;
+  why.push(it.onSale ? d + '% 할인' : '정가');
+  if(c.status === 'ok' && c.taxFree){ sc += 8; why.push('면세'); }
+  if(c.status !== 'ok') why.push('원가 계산 미완료');
+  if(it.availability === 'unknown') why.push('재고 미확인');
+  if(isStale(it)) why.push('24시간 지난 정보');
+  return {score:sc, why:why.join(' · ')};
+}
+
+/* ============================================================
+   게시글 생성
    ============================================================ */
 function buildPost(it){
-  const kb = BRAND_KR[it.brand] || it.brand;
-  const badge = off(it) >= 40 ? '♡핫딜♡ ' : '';
-  const title = `[해외직구] ${badge}${kb} ${it.kr}`;
+  const kb = brandLabel(it);
+  const badge = (it.offRate || 0) >= 40 ? '♡핫딜♡ ' : '';
+  const title = `[해외직구] ${badge}${kb} ${it.name}`;
   const c = landed(it);
-  const sell = c.total * CFG.markup;
+  const priceLine = c.status === 'ok'
+    ? `✅ 가격 ${Math.round(c.totalKrw * SETTINGS.markup)}`
+    : `✅ 가격 (원가 계산 미완료 — ${c.incompleteReason || '조건 미검증'})`;
   const body =
 `🌻 해바라기 해외직구 🌻
 
 ▪ 브랜드 : ${kb}
-▪ 상품명 : ${it.kr}
-▪ 현지가 : ${it.onSale ? `${cur(it.list, it.cur)} → ${cur(it.sale, it.cur)} (${off(it)}% 할인)` : `${cur(it.sale, it.cur)} (정가)`}
+▪ 상품명 : ${it.name}
+▪ 현지가 : ${it.onSale ? `${cur(it.listPrice, it.currency)} → ${cur(it.salePrice, it.currency)} (${it.offRate}% 할인)` : `${cur(it.salePrice, it.currency)} (정가)`}
+▪ 구입처 : ${it.sourceShop}${it.marketCountry ? ` (${COUNTRY_KR[it.marketCountry] || it.marketCountry})` : ''}
 
-✅ 가격 ${Math.round(sell)}
+${priceLine}
 
 ✅ 소재 (직접 입력)
 
@@ -624,29 +790,25 @@ function buildPost(it){
 }
 
 /* ============================================================
-   렌더링
+   렌더링 — Sale중
    ============================================================ */
-const $ = s => document.querySelector(s);
-
-/* 스캔 실패 사이트 목록 — 접혀 있다가 버튼을 누르면 전체가 펼쳐진다.
-   toggleSel/listSel: 버튼과 목록 엘리먼트 셀렉터. meta: {errors:[{brand,domain,error}]} */
 function renderErrorToggle(meta, toggleSel, listSel){
   const toggle = $(toggleSel), list = $(listSel);
-  const errs = meta && meta.errors ? meta.errors : [];
+  const errs = (meta && meta.errors) ? meta.errors : [];
   if(!errs.length){
     toggle.style.display = 'none';
     list.style.display = 'none';
-    list.innerHTML = '';
+    clear(list);
     return;
   }
   toggle.style.display = 'block';
   toggle.textContent = `실패 목록 보기 (${errs.length}곳)`;
   list.style.display = 'none';
-  list.innerHTML = errs.map(e => `
-    <div class="src">
-      <span class="shop">${BRAND_KR[e.brand] || e.brand} <span style="color:var(--muted);font-weight:400">(${e.domain})</span></span>
-      <span class="sp" style="font-size:12px;color:var(--muted)">${e.error}</span>
-    </div>`).join('');
+  fill(list, errs.map(e => el('div', {class:'src'}, [
+    el('span', {class:'shop', text: `${e.brand || e.sourceId} (${e.domain || ''})`}),
+    el('span', {class:'sp', style:'font-size:12px;color:var(--muted)',
+                text: `${e.status || ''}${e.httpStatus ? ' ' + e.httpStatus : ''}${e.error ? ' · ' + e.error : ''}`})
+  ])));
   toggle.onclick = () => {
     const open = list.style.display !== 'none';
     list.style.display = open ? 'none' : 'block';
@@ -654,333 +816,241 @@ function renderErrorToggle(meta, toggleSel, listSel){
   };
 }
 
-/* 온디맨드 스캔이라 "어제 대비" 데이터가 없다. 스캔 기록을 서버에 쌓기 전까지는
-   이번 스캔에서 감지된 브랜드별 세일 상품 수 랭킹으로 대신한다. */
+function buildSignals(items){
+  const map = {};
+  items.filter(it => it.onSale).forEach(it => {
+    const id = it.brandId || it.brand;
+    if(!map[id]) map[id] = {brandId: id, label: brandLabel(it), count: 0, maxOff: 0};
+    map[id].count++;
+    map[id].maxOff = Math.max(map[id].maxOff, it.offRate || 0);
+  });
+  return Object.values(map).sort((a, b) => b.count - a.count);
+}
+
 function renderSignals(){
   renderErrorToggle(lastSignalScanMeta, '#sigErrToggle', '#sigErrList');
+  const count = $('#sigCount'), sub = $('#sigSub'), list = $('#signalList');
+  const setCount = n => fill(count, [document.createTextNode(String(n)), el('small', {text:'개 브랜드에서 세일 감지'})]);
+
   if(!lastSignalScanMeta){
-    $('#sigCount').innerHTML = `0<small>개 브랜드에서 세일 감지</small>`;
-    $('#sigSub').textContent = '상단의 스캔 버튼을 눌러 지금 세일 중인 상품을 가져오세요.';
-    $('#signalList').innerHTML = '';
+    setCount(0);
+    sub.textContent = '상단의 스캔 버튼을 눌러 지금 세일 중인 상품을 가져오세요.';
+    clear(list);
     return;
   }
   if(!SIGNALS.length){
-    $('#sigCount').innerHTML = `0<small>개 브랜드에서 세일 감지</small>`;
-    $('#sigSub').textContent = `${lastSignalScanMeta.sitesOk}개 사이트를 확인했지만 지금은 세일 상품이 없습니다.`;
-    $('#signalList').innerHTML = '';
+    setCount(0);
+    sub.textContent = `${lastSignalScanMeta.sitesOk}개 판매처를 확인했지만 지금은 세일 상품이 없습니다.`;
+    clear(list);
     return;
   }
-  $('#sigCount').innerHTML = `${SIGNALS.length}<small>개 브랜드에서 세일 감지</small>`;
+  setCount(SIGNALS.length);
   const top = SIGNALS[0];
-  $('#sigSub').textContent =
-    `${BRAND_KR[top.brand] || top.brand}에서 세일 상품 ${top.count}개가 감지됐습니다. ` +
-    `(전일 대비 변화는 스캔 기록이 쌓이면 표시됩니다)`;
+  sub.textContent = `${top.label}에서 세일 상품 ${top.count}개가 감지됐습니다. (전일 대비 변화는 스캔 기록이 쌓이면 표시됩니다)`;
 
-  // SIGNALS 자체는 buildSignals()가 정한 기본순(세일 많은순)을 유지하고,
-  // 화면에 뿌릴 때만 선택한 정렬 기준으로 복사본을 정렬한다.
-  const sigSortMode = $('#sigSortSel').value;
+  const sortMode = $('#sigSortSel').value;
   const sorted = [...SIGNALS];
-  if(sigSortMode === 'off') sorted.sort((a, b) => b.maxOff - a.maxOff);
-  else if(sigSortMode === 'brand') sorted.sort((a, b) =>
-    (BRAND_KR[a.brand] || a.brand).localeCompare(BRAND_KR[b.brand] || b.brand, 'ko'));
+  if(sortMode === 'off') sorted.sort((a, b) => b.maxOff - a.maxOff);
+  else if(sortMode === 'brand') sorted.sort((a, b) => a.label.localeCompare(b.label, 'ko'));
   else sorted.sort((a, b) => b.count - a.count);
 
   const maxCount = Math.max(...SIGNALS.map(s => s.count));
-  $('#signalList').innerHTML = sorted.map(s => {
-    const pct = Math.round((s.count / maxCount) * 100);
-    return `<li><button class="row" data-brand="${s.brand}">
-      <div class="row-top">
-        <span class="brand">${BRAND_KR[s.brand] || s.brand}</span>
-        <span class="tag">세일 감지</span>
-      </div>
-      <div class="row-meta">세일 <b>${s.count}개</b> · 최고 할인 ${s.maxOff}%</div>
-      <div class="bar"><span class="now" style="width:${pct}%"></span></div>
-    </button></li>`;
-  }).join('');
+  fill(list, sorted.map(s => el('li', {}, [
+    el('button', {class:'row', on:{click: () => openBrandFromSignal(s.brandId)}}, [
+      el('div', {class:'row-top'}, [
+        el('span', {class:'brand', text: s.label}),
+        el('span', {class:'tag', text:'세일 감지'})
+      ]),
+      el('div', {class:'row-meta', text: `세일 ${s.count}개 · 최고 할인 ${s.maxOff}%`}),
+      el('div', {class:'bar'}, [el('span', {class:'now', style:`width:${Math.round((s.count / maxCount) * 100)}%`})])
+    ])
+  ])));
+}
 
-  document.querySelectorAll('.row').forEach(r => {
-    r.onclick = () => {
-      // 재조회 없이 방금 찾은 세일 상품을 그대로 상품탭에 옮겨서 보여준다.
-      const brand = r.dataset.brand;
-      const brandItems = SIGNAL_ITEMS.filter(it => it.brand === brand);
-      ITEMS = ITEMS.filter(it => it.brand !== brand).concat(brandItems);
-      if(!lastProductScanMeta) lastProductScanMeta = lastSignalScanMeta;
-      query = BRAND_KR[brand] || brand;
-      $('#q').value = query;
-      $('#fBrandSel').value = brand;
-      go('v-items'); renderItems();
-    };
+/* Sale중에서 찾은 상품을 상품탭으로 옮긴다 — 재조회 없이, 기존 상품은 지우지 않는다 */
+function openBrandFromSignal(brandId){
+  const picked = SIGNAL_STATE.items.filter(it => Brands.sameBrand(it.brandId || it.brand, brandId));
+  const res = Merge.mergeResult(PRODUCT_STATE, {
+    collectedAt: new Date().toISOString(),
+    items: picked,
+    sourceResults: [] // 범위를 확정하지 않는다 → upsert만
   });
-}
-
-let query = '';
-
-/* ============================================================
-   검색 — 브랜드 / 옷 종류 / 가격 중 무엇을 넣어도 걸린다
-   ============================================================ */
-const TYPES = [
-  {key:'가디건', w:['가디건','cardigan']},
-  {key:'자켓',   w:['자켓','재킷','블레이저','블레이져','jacket','blazer','coat','코트']},
-  {key:'원피스', w:['원피스','드레스','dress']},
-  {key:'니트',   w:['니트','스웨터','캐시미어','sweater','knit','cashmere']},
-  {key:'신발',   w:['신발','슈즈','로퍼','메리제인','스니커즈','부츠','loafer','shoe','sneaker','boot','mary jane']},
-  {key:'선글라스',w:['선글라스','안경','sunglass','eyewear']},
-  {key:'가방',   w:['가방','토트','백','bag','tote']},
-  {key:'팬츠',   w:['팬츠','바지','청바지','진','pant','jean','trouser']},
-  {key:'셔츠',   w:['셔츠','블라우스','폴로','shirt','blouse','polo']}
-];
-const BRAND_ALIAS = {
-  'Lacoste':['라코스테','라코','lacoste'],
-  'Coach':['코치','coach'],
-  'Zadig&Voltaire':['쟈딕앤볼테르','자딕앤볼테르','쟈딕','자딕','zadig'],
-  'Theory':['띠어리','시어리','theory'],
-  'Sandro':['산드로','sandro'],
-  'Maje':['마쥬','마제','maje'],
-  'Ganni':['가니','ganni'],
-  'AllSaints':['올세인츠','올세인트','allsaints','all saints'],
-  'Reiss':['리스','reiss'],
-  'Vince':['빈스','vince'],
-  'Max Mara':['막스마라','맥스마라','max mara','maxmara'],
-  'Free People':['프리피플','free people'],
-  'Polo Ralph Lauren':['폴로 랄프로렌','폴로랄프로렌','랄프로렌','랄프','ralph lauren','polo ralph'],
-  'COS':['코스'],
-  'Isabel Marant':['이자벨마랑','이자벨','isabel marant'],
-  'Tory Burch':['토리버치','토리','tory burch'],
-  'Marc Jacobs':['마크제이콥스','마크제이','marc jacobs'],
-  'Kate Spade':['케이트스페이드','케이트','kate spade'],
-  'Michael Kors':['마이클코어스','마이클','michael kors'],
-  'Longchamp':['롱샴','longchamp'],
-  'Ferragamo':['페라가모','ferragamo'],
-  'New Balance':['뉴발란스','뉴발','new balance'],
-  'Golden Goose':['골든구스','골구','golden goose'],
-  'Ugg':['어그','ugg'],
-  'Hoka':['호카','hoka'],
-  'On Running':['온러닝','on running','on cloud'],
-  'Salomon':['살로몬','salomon'],
-  'Veja':['베자','veja'],
-  'Arc\u2019teryx':['아크테릭스','아크','arcteryx','arc teryx'],
-  'Patagonia':['파타고니아','파타','patagonia'],
-  'Lululemon':['룰루레몬','룰루','lululemon'],
-  'Barbour':['바버','barbour'],
-  'Carhartt WIP':['칼하트','carhartt'],
-  'Reformation':['레포메이션','reformation'],
-  'Kith':['키스','kith'],
-  'Fashion Nova':['패션노바','fashion nova'],
-  'Nasty Gal':['나스티갤','nasty gal'],
-  'Princess Polly':['프린세스폴리','princess polly'],
-  'Gymshark':['짐샤크','gymshark'],
-  'Allbirds':['올버즈','allbirds'],
-  'Rothy’s':['로시스','rothys','rothy'],
-  'Rebecca Minkoff':['레베카민코프','rebecca minkoff'],
-  'MVMT':['무브먼트','mvmt'],
-  'Girlfriend Collective':['걸프렌드컬렉티브','girlfriend collective'],
-  'Outdoor Voices':['아웃도어보이시스','outdoor voices'],
-  'Cuyana':['쿠야나','cuyana'],
-  'Naadam':['나담','naadam'],
-  'M.Gemi':['엠제미','mgemi'],
-  'Marine Layer':['마린레이어','marine layer'],
-  'Faherty':['파허티','faherty'],
-  'Kotn':['코튼','kotn']
-};
-
-function detectType(it){
-  const hay = (it.kr + ' ' + it.name).toLowerCase();
-  const hit = TYPES.find(t => t.w.some(w => hay.includes(w)));
-  return hit ? hit.key : '기타';
-}
-
-function parseQuery(q){
-  const r = {brand:null, type:null, min:null, max:null, text:[]};
-  if(!q.trim()) return r;
-  let s = ' ' + q.toLowerCase().replace(/,/g, '') + ' ';
-
-  // 가격 — 만원 단위는 최종 원가 기준, 달러는 현지가 기준
-  const eat = (re, fn) => { const m = s.match(re); if(m){ fn(m); s = s.replace(m[0], ' '); } };
-  eat(/(\d+)\s*[~-]\s*(\d+)\s*만원?/, m => { r.min = +m[1]*10000; r.max = +m[2]*10000; });
-  eat(/(\d+)\s*만원?\s*(이하|이내|미만|아래|밑)/, m => r.max = +m[1]*10000);
-  eat(/(\d+)\s*만원?\s*(이상|넘는|초과|위)/, m => r.min = +m[1]*10000);
-  eat(/\$\s*(\d+)\s*(이하|이내|미만)?/, m => r.maxUSD = +m[1]);
-  eat(/(\d+)\s*달러\s*(이하|이내|미만)?/, m => r.maxUSD = +m[1]);
-  eat(/(\d{5,})\s*원?\s*(이하|이내|미만)?/, m => r.max = +m[1]);
-  eat(/(\d+)\s*만원?/, m => r.max = +m[1]*10000);
-
-  // 긴 이름부터 검사한다. '라코스테'가 'COS(코스)'로 잘못 잡히는 일을 막는다.
-  const cand = Object.entries(BRAND_ALIAS)
-    .flatMap(([b, alias]) => alias.map(a => [b, a]))
-    .sort((x, y) => y[1].length - x[1].length);
-  for(const [b, a] of cand){
-    if(s.includes(a)){ r.brand = b; s = s.split(a).join(' '); break; }
-  }
-
-  const t = TYPES.find(t => t.w.some(w => s.includes(w)));
-  if(t){ r.type = t.key; t.w.forEach(w => s = s.replace(w, ' ')); }
-
-  r.text = s.split(/\s+/).filter(w => w.length > 1);
-  return r;
-}
-
-const COLOR_KR = {
-  'noir':'블랙 검정', 'black':'블랙 검정', 'ecru':'에크루 아이보리 크림',
-  'graphite':'그레이 회색 차콜', 'flour':'화이트 흰색 아이보리',
-  'rose':'로즈 핑크 분홍', 'dark brown':'브라운 갈색', 'gold/grey':'골드 그레이 회색',
-  'cream':'크림 아이보리 베이지', 'white':'화이트 흰색'
-};
-
-function matches(it, f){
-  const c = landed(it);
-  if(f.brand && it.brand !== f.brand) return false;
-  if(f.type && it.type !== f.type) return false;
-  if(f.min && c.total < f.min) return false;
-  if(f.max && c.total > f.max) return false;
-  if(f.maxUSD && it.sale > f.maxUSD) return false;
-  if(f.text.length){
-    const col = it.color.toLowerCase();
-    const hay = (it.kr + ' ' + it.name + ' ' + (BRAND_KR[it.brand] || it.brand) + ' ' +
-                 col + ' ' + (COLOR_KR[col] || '')).toLowerCase();
-    if(!f.text.every(w => hay.includes(w))) return false;
-  }
-  return true;
+  PRODUCT_STATE = res.state;
+  query = Brands.brandLabel(brandId, brandId);
+  $('#q').value = query;
+  $('#fBrandSel').value = brandId;
+  saveState();
+  go('v-items');
+  renderItems();
 }
 
 /* ============================================================
-   자동 추천 — 조건을 안 넣으면 이 점수로 정렬한다
+   렌더링 — 상품
    ============================================================ */
-const SIGNAL_BONUS = {'세일 개시':15, '추가 세일':10, '품목 확대':6};
-
-function scoreItem(it){
-  const c = landed(it);
-  const d = off(it);
-  const sig = SIGNALS.find(s => s.brand === it.brand);
-  const why = [];
-  let sc = d;                                   // 할인율이 기본 점수
-  if(sig && SIGNAL_BONUS[sig.kind]){
-    sc += SIGNAL_BONUS[sig.kind]; why.push(sig.kind);
-  }
-  if(d >= 40){ sc += 8; }
-  why.push(it.onSale ? d + '% 할인' : '정가 · 저렴');
-  if(c.free){ sc += 8; why.push('면세'); }
-  return {score:sc, why:why.join(' · ')};
-}
-
 let itemPage = 1;
 const PAGE_SIZE = 20;
 
-// 조회했는데 0건일 때, "상품이 없다"와 "사이트 연결에 실패했다"를 구분해서 보여준다.
-// 후자를 그냥 "없습니다"로 뭉개면 사용자가 원인을 알 방법이 없다.
 function buildEmptyItemsMessage(){
-  if(!lastProductScanMeta){
-    return `<p class="empty">아직 조회하지 않았습니다.<br>브랜드를 고르고 '확인'을 눌러주세요.</p>`;
+  const p = el('p', {class:'empty'});
+  if(!lastProductScanMeta && !ITEMS().length){
+    p.appendChild(document.createTextNode('아직 조회하지 않았습니다.'));
+    p.appendChild(el('br'));
+    p.appendChild(document.createTextNode("브랜드를 고르고 '확인'을 누르거나, 설정 탭에서 PC 수집 결과를 가져오세요."));
+    return p;
   }
   const m = lastProductScanMeta;
-  if(m.itemCount === 0 && m.errors && m.errors.length){
-    const lines = m.errors.slice(0, 3).map(e => `${e.brand}: ${e.error}`).join('<br>');
-    return `<p class="empty">사이트에 연결하지 못했습니다.<br><span style="font-size:12px">${lines}</span></p>`;
+  if(m && m.itemCount === 0 && m.errors && m.errors.length){
+    p.appendChild(document.createTextNode('판매처에 연결하지 못했습니다.'));
+    p.appendChild(el('br'));
+    m.errors.slice(0, 3).forEach(e => {
+      p.appendChild(el('span', {style:'font-size:12px', text: `${e.brand || e.sourceId}: ${e.status || ''} ${e.error || ''}`}));
+      p.appendChild(el('br'));
+    });
+    return p;
   }
-  return `<p class="empty">조건에 맞는 상품이 없습니다.<br>가격을 넓히거나 브랜드만 넣어보세요.</p>`;
+  p.appendChild(document.createTextNode('조건에 맞는 상품이 없습니다.'));
+  p.appendChild(el('br'));
+  p.appendChild(document.createTextNode('가격을 넓히거나 브랜드만 넣어보세요.'));
+  return p;
 }
 
-function renderItems(resetPage = true){
-  if(resetPage) itemPage = 1;
-  $('#brandSuggest').classList.remove('on'); $('#brandSuggest').innerHTML = '';
-  renderErrorToggle(lastProductScanMeta, '#prodErrToggle', '#prodErrList');
+function currentFilters(){
   const f = parseQuery(query);
-
-  // 드롭다운은 검색어 파싱 결과 위에 덮어쓴다 — 텍스트 검색과 드롭다운을 함께 써도 된다
   const dropBrand = $('#fBrandSel').value;
   const dropType = $('#fTypeSel').value;
   const dropPriceIdx = $('#fPriceSel').value;
-  if(dropBrand) f.brand = dropBrand;
+  const dropCountry = $('#fCountrySel').value;
+  const dropSource = $('#fSourceSel').value;
+  if(dropBrand) f.brandId = dropBrand;
   if(dropType) f.type = dropType;
+  if(dropCountry) f.country = dropCountry;
+  if(dropSource) f.sourceId = dropSource;
   if(dropPriceIdx !== ''){
     const band = PRICE_BANDS[+dropPriceIdx];
     f.min = band.min || null;
     f.max = band.max;
   }
-  const dropdownActive = !!(dropBrand || dropType || dropPriceIdx !== '');
-  const auto = !query.trim() && !dropdownActive;
+  f.dropdownActive = !!(dropBrand || dropType || dropCountry || dropSource || dropPriceIdx !== '');
+  return f;
+}
 
-  // 인식한 조건을 보여준다
+function itemCard(it, why, showWhy){
+  const c = landed(it);
+  const thumbSrc = (it.imageUrls || []).map(u => Urls.safeImageUrl(u)).find(Boolean);
+  const thumb = el('div', {class:'thumb'});
+  if(thumbSrc) thumb.appendChild(el('img', {attrs:{src: thumbSrc, alt:'', loading:'lazy'}, style:'width:100%;height:100%;object-fit:cover'}));
+  else thumb.appendChild(document.createTextNode(brandLabel(it).slice(0, 2)));
+
+  const price = el('div', {class:'pprice'}, [
+    it.onSale ? el('span', {class:'was num', text: cur(it.listPrice, it.currency)}) : null,
+    el('span', {class:'now-p num', text: cur(it.salePrice, it.currency) + (it.priceVaries ? '~' : '')}),
+    it.onSale ? el('span', {class:'off num', text: it.offRate + '%'}) : el('span', {class:'off num calm', text:'정가'})
+  ]);
+
+  const costLine = el('div', {class:'krw'});
+  costLine.appendChild(document.createTextNode(`${it.sourceShop}${it.marketCountry ? ' · ' + (COUNTRY_KR[it.marketCountry] || it.marketCountry) : ''} · `));
+  if(c.status === 'ok'){
+    costLine.appendChild(document.createTextNode('원가 '));
+    costLine.appendChild(el('b', {class:'num', text: won(c.totalKrw) + '원'}));
+  }else{
+    costLine.appendChild(el('b', {class:'num', text:'원가 계산 미완료'}));
+  }
+
+  const info = el('div', {class:'pinfo'}, [
+    el('div', {class:'pname', text: `${brandLabel(it)} ${it.name}`}),
+    price,
+    costLine,
+    it.availability === 'out_of_stock' ? el('div', {class:'why', text:'품절'}) :
+      it.availability === 'unknown' ? el('div', {class:'why', style:'color:var(--muted)', text:'재고 미확인'}) : null,
+    isStale(it) ? el('div', {class:'why', style:'color:var(--muted)', text:'24시간 지난 정보 — 다시 조회하세요'}) : null,
+    showWhy ? el('div', {class:'why', text: why}) : null
+  ]);
+
+  return el('button', {class:'pitem', on:{click: () => openSheet(it)}}, [thumb, info]);
+}
+
+function renderItems(resetPage = true){
+  if(resetPage) itemPage = 1;
+  $('#brandSuggest').classList.remove('on');
+  clear($('#brandSuggest'));
+  renderErrorToggle(lastProductScanMeta, '#prodErrToggle', '#prodErrList');
+
+  const f = currentFilters();
+  const auto = !query.trim() && !f.dropdownActive;
+
   const chips = [];
-  if(f.brand) chips.push(BRAND_KR[f.brand]);
+  if(f.brandId) chips.push(Brands.brandLabel(f.brandId, f.brandId));
+  if(f.country) chips.push(COUNTRY_KR[f.country] || f.country);
+  if(f.sourceId) chips.push(f.sourceId);
   if(f.type) chips.push(f.type);
-  if(f.maxUSD) chips.push('$' + f.maxUSD + ' 이하');
+  if(f.maxLocal) chips.push('현지가 ' + f.maxLocal + ' 이하');
   if(f.min && f.max) chips.push(won(f.min) + '~' + won(f.max) + '원');
   else if(f.max) chips.push(won(f.max) + '원 이하');
   else if(f.min) chips.push(won(f.min) + '원 이상');
+  const textStart = chips.length;
   f.text.forEach(t => chips.push(t));
-  $('#parsed').innerHTML = chips.map((c, i) =>
-    `<span class="pchip ${i >= chips.length - f.text.length ? 'miss' : ''}">${c}</span>`).join('');
+  fill($('#parsed'), chips.map((c, i) => el('span', {class: 'pchip' + (i >= textStart ? ' miss' : ''), text: c})));
   $('#hint').style.display = auto ? 'block' : 'none';
 
-  // 브랜드 바로가기
-  const brands = [...new Set(ITEMS.map(i => i.brand))];
-  $('#filterBar').innerHTML =
-    `<button class="chip ${auto ? 'on' : ''}" data-f="">추천</button>` +
-    brands.map(b => `<button class="chip ${f.brand === b ? 'on' : ''}" data-f="${BRAND_KR[b] || b}">${BRAND_KR[b] || b}</button>`).join('');
-  $('#filterBar').querySelectorAll('.chip').forEach(c => {
-    c.onclick = () => { query = c.dataset.f; $('#q').value = query; renderItems(); };
-  });
+  // 브랜드 바로가기 칩 — 드롭다운과 같은 brandId를 쓴다
+  const brandIds = [...new Set(ITEMS().map(i => i.brandId || i.brand))];
+  fill($('#filterBar'), [
+    el('button', {class: 'chip' + (auto ? ' on' : ''), text:'추천',
+      on:{click: () => { query=''; $('#q').value=''; resetDropdowns(); renderItems(); }}})
+  ].concat(brandIds.map(id => el('button', {
+    class: 'chip' + (f.brandId === id ? ' on' : ''),
+    text: Brands.brandLabel(id, id),
+    on:{click: () => { $('#fBrandSel').value = id; query=''; $('#q').value=''; renderItems(); }}
+  }))));
 
-  let list = ITEMS.filter(it => matches(it, f));
-  list = list.map(it => ({it, ...scoreItem(it)}));
+  let list = ITEMS().filter(it => matches(it, f)).map(it => Object.assign({it}, scoreItem(it)));
   const sortMode = $('#fSortSel').value;
-  if(sortMode === 'asc') list.sort((a, b) => landed(a.it).total - landed(b.it).total);
-  else if(sortMode === 'desc') list.sort((a, b) => landed(b.it).total - landed(a.it).total);
-  else if(sortMode === 'brand') list.sort((a, b) =>
-    (BRAND_KR[a.it.brand] || a.it.brand).localeCompare(BRAND_KR[b.it.brand] || b.it.brand, 'ko'));
+  const total = it => { const t = costTotal(it); return t === null ? Infinity : t; };
+  if(sortMode === 'asc') list.sort((a, b) => total(a.it) - total(b.it));
+  else if(sortMode === 'desc') list.sort((a, b) => total(b.it) - total(a.it));
+  else if(sortMode === 'brand') list.sort((a, b) => brandLabel(a.it).localeCompare(brandLabel(b.it), 'ko'));
   else list.sort((a, b) => b.score - a.score);
 
   $('#resTitle').textContent = auto ? '오늘의 추천' : '검색 결과';
   $('#resCount').textContent = list.length ? list.length + '건' : '';
-  $('#siteStatus').textContent = lastProductScanMeta
-    ? (lastProductScanMeta.sitesFailed
-        ? `사이트 ${lastProductScanMeta.sitesOk}/${lastProductScanMeta.sitesTotal}곳 확인됨 · ${lastProductScanMeta.sitesFailed}곳은 연결 실패해서 이 목록에 없음`
-        : `사이트 ${lastProductScanMeta.sitesOk}곳 모두 확인됨`)
-    : '';
+  $('#siteStatus').textContent = statusLine();
 
   if(!list.length){
-    $('#itemList').innerHTML = buildEmptyItemsMessage();
+    fill($('#itemList'), [buildEmptyItemsMessage()]);
     return;
   }
-
   const visible = list.slice(0, itemPage * PAGE_SIZE);
-  const cards = visible.map(({it, why}) => {
-    const c = landed(it);
-    const thumb = it.imgs && it.imgs[0]
-      ? `<img src="${it.imgs[0]}" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover">`
-      : (BRAND_KR[it.brand] || it.brand).slice(0,2);
-    return `<button class="pitem" data-i="${ITEMS.indexOf(it)}">
-      <div class="thumb">${thumb}</div>
-      <div class="pinfo">
-        <div class="pname">${BRAND_KR[it.brand] || it.brand} ${it.kr}</div>
-        <div class="pprice">
-          ${it.onSale ? `<span class="was num">${cur(it.list, it.cur)}</span>` : ''}
-          <span class="now-p num">${cur(it.sale, it.cur)}</span>
-          ${it.onSale ? `<span class="off num">${off(it)}%</span>` : `<span class="off num calm">정가</span>`}
-        </div>
-        <div class="krw">${bestSource(it).shop} · 원가 <b class="num">${won(c.total)}원</b></div>
-        ${auto ? `<div class="why">${why}</div>` : ''}
-      </div>
-    </button>`;
-  }).join('');
-
-  const more = visible.length < list.length
-    ? `<div class="btnrow" style="padding:14px 18px">
-         <button class="btn" id="loadMoreBtn">다음 (${visible.length}/${list.length})</button>
-       </div>`
-    : '';
-  $('#itemList').innerHTML = cards + more;
-
-  $('#itemList').querySelectorAll('.pitem').forEach(b => {
-    b.onclick = () => openSheet(ITEMS[+b.dataset.i]);
-  });
-  const loadMoreBtn = $('#loadMoreBtn');
-  if(loadMoreBtn) loadMoreBtn.onclick = () => { itemPage++; renderItems(false); };
+  const cards = visible.map(({it, why}) => itemCard(it, why, auto));
+  if(visible.length < list.length){
+    cards.push(el('div', {class:'btnrow', style:'padding:14px 18px'}, [
+      el('button', {class:'btn', text:`다음 (${visible.length}/${list.length})`,
+        on:{click: () => { itemPage++; renderItems(false); }}})
+    ]));
+  }
+  fill($('#itemList'), cards);
 }
 
-/* ---------- 브랜드 자동완성 ----------
-   초성만 입력하면 초성이 일치하는 브랜드, 완성된 글자를 입력하면 그 글자로
-   시작하는 브랜드를 가나다순으로 보여준다. (예: ㄹ → ㄹ로 시작 / 라 → 라로 시작 / 라코 → 라코스테) */
+function statusLine(){
+  const parts = [];
+  const results = PRODUCT_STATE.sourceResults || [];
+  if(results.length){
+    const ok = results.filter(r => r.status === 'ok' || r.status === 'empty').length;
+    const failed = results.length - ok;
+    parts.push(`판매처 ${ok}/${results.length}곳 확인됨${failed ? ` · ${failed}곳 실패(아래 목록)` : ''}`);
+  }
+  if(PRODUCT_STATE.updatedAt){
+    const d = new Date(PRODUCT_STATE.updatedAt);
+    parts.push(`마지막 갱신 ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`);
+  }
+  if(COST_CFG_ERROR) parts.push(COST_CFG_ERROR);
+  return parts.join(' · ');
+}
+
+function resetDropdowns(){
+  ['#fBrandSel','#fTypeSel','#fPriceSel','#fCountrySel','#fSourceSel'].forEach(s => { $(s).value = ''; });
+}
+
+/* ---------- 브랜드 자동완성 (초성 검색) ---------- */
 const CHOSUNG = ['ㄱ','ㄲ','ㄴ','ㄷ','ㄸ','ㄹ','ㅁ','ㅂ','ㅃ','ㅅ','ㅆ','ㅇ','ㅈ','ㅉ','ㅊ','ㅋ','ㅌ','ㅍ','ㅎ'];
 function chosungOf(str){
   let out = '';
@@ -990,94 +1060,108 @@ function chosungOf(str){
   }
   return out;
 }
-const ALL_BRANDS_KR = [...new Set(Object.values(BRAND_KR))].sort((a, b) => a.localeCompare(b, 'ko'));
-
-/* ---------- 드롭다운 필터(브랜드/종류/가격대) ---------- */
-const BRAND_ENTRIES_SORTED = Object.entries(BRAND_KR).sort((a, b) => a[1].localeCompare(b[1], 'ko'));
-const PRICE_BANDS = [
-  {label:'10만원 이하', min:0, max:100000},
-  {label:'10~20만원', min:100000, max:200000},
-  {label:'20~30만원', min:200000, max:300000},
-  {label:'30~50만원', min:300000, max:500000},
-  {label:'50만원 이상', min:500000, max:null},
-];
-function populateDropdownFilters(){
-  $('#fBrandSel').innerHTML = '<option value="">브랜드 전체</option>' +
-    BRAND_ENTRIES_SORTED.map(([key, kr]) => `<option value="${key}">${kr}</option>`).join('');
-  $('#fTypeSel').innerHTML = '<option value="">종류 전체</option>' +
-    TYPES.map(t => `<option value="${t.key}">${t.key}</option>`).join('');
-  $('#fPriceSel').innerHTML = '<option value="">가격대 전체</option>' +
-    PRICE_BANDS.map((b, i) => `<option value="${i}">${b.label}</option>`).join('');
-}
-// 브랜드/종류/가격대는 확인 버튼을 눌러야 적용된다(새로 크롤링해야 할 수도 있어서).
-// 정렬은 이미 불러온 상품을 다시 늘어놓는 것뿐이라 바로 반영한다.
-$('#fSortSel').addEventListener('change', () => renderItems(false));
-$('#sigSortSel').addEventListener('change', () => renderSignals());
+const ALL_BRANDS = Brands.allBrands().slice().sort((a, b) => (a.kr || a.en).localeCompare(b.kr || b.en, 'ko'));
 
 function matchBrandSuggest(q){
   if(!q) return [];
   const isChosungOnly = /^[ㄱ-ㅎ]+$/.test(q);
-  return ALL_BRANDS_KR.filter(b => isChosungOnly ? chosungOf(b).startsWith(q) : b.startsWith(q));
-}
-
-function renderBrandSuggest(q){
-  const el = $('#brandSuggest');
-  const list = matchBrandSuggest(q).slice(0, 12);
-  if(!list.length){ el.classList.remove('on'); el.innerHTML = ''; return; }
-  el.classList.add('on');
-  el.innerHTML = list.map(b => `<button type="button">${b}</button>`).join('');
-  el.querySelectorAll('button').forEach(btn => {
-    btn.onclick = () => {
-      query = btn.textContent;
-      $('#q').value = query;
-      el.classList.remove('on'); el.innerHTML = '';
-      renderItems();
-    };
+  const lower = q.toLowerCase();
+  return ALL_BRANDS.filter(b => {
+    const kr = b.kr || b.en;
+    if(isChosungOnly) return chosungOf(kr).startsWith(q);
+    return kr.startsWith(q) || b.en.toLowerCase().startsWith(lower);
   });
 }
+function renderBrandSuggest(q){
+  const box = $('#brandSuggest');
+  const list = matchBrandSuggest(q).slice(0, 12);
+  if(!list.length){ box.classList.remove('on'); clear(box); return; }
+  box.classList.add('on');
+  fill(box, list.map(b => el('button', {attrs:{type:'button'}, text: b.kr || b.en, on:{click: () => {
+    query = b.kr || b.en;
+    $('#q').value = query;
+    $('#fBrandSel').value = b.id;
+    box.classList.remove('on'); clear(box);
+    renderItems();
+  }}})));
+}
 
-let qTimer;
-$('#q').oninput = e => {
-  const v = e.target.value;
-  renderBrandSuggest(v);
-  clearTimeout(qTimer);
-  qTimer = setTimeout(() => { query = v; renderItems(); }, 180);
-};
-$('#qClear').onclick = () => {
-  query = ''; $('#q').value = '';
-  $('#brandSuggest').classList.remove('on'); $('#brandSuggest').innerHTML = '';
-  renderItems(); $('#q').focus();
-};
+/* ---------- 드롭다운 채우기 ---------- */
+function populateDropdownFilters(){
+  const brandOpts = [el('option', {attrs:{value:''}, text:'브랜드 전체'})]
+    .concat(ALL_BRANDS.map(b => el('option', {attrs:{value:b.id}, text: b.kr || b.en})));
+  fill($('#fBrandSel'), brandOpts);
+  fill($('#fTypeSel'), [el('option', {attrs:{value:''}, text:'종류 전체'})]
+    .concat(TYPES.map(t => el('option', {attrs:{value:t.key}, text:t.key}))));
+  fill($('#fPriceSel'), [el('option', {attrs:{value:''}, text:'가격대 전체'})]
+    .concat(PRICE_BANDS.map((b, i) => el('option', {attrs:{value:String(i)}, text:b.label}))));
+  refreshDataDrivenFilters();
+}
 
-/* ---------- 상세 시트 ---------- */
+/* 국가·판매처 목록은 실제 가지고 있는 상품에서 만든다 */
+function refreshDataDrivenFilters(){
+  const keepCountry = $('#fCountrySel').value;
+  const keepSource = $('#fSourceSel').value;
+  const countries = [...new Set(ITEMS().map(i => i.marketCountry).filter(Boolean))].sort();
+  const sources = [...new Set(ITEMS().map(i => i.sourceId).filter(Boolean))].sort();
+  fill($('#fCountrySel'), [el('option', {attrs:{value:''}, text:'국가 전체'})]
+    .concat(countries.map(c => el('option', {attrs:{value:c}, text: COUNTRY_KR[c] || c}))));
+  fill($('#fSourceSel'), [el('option', {attrs:{value:''}, text:'판매처 전체'})]
+    .concat(sources.map(s => {
+      const label = (ITEMS().find(i => i.sourceId === s) || {}).sourceShop || s;
+      return el('option', {attrs:{value:s}, text: label});
+    })));
+  if(countries.includes(keepCountry)) $('#fCountrySel').value = keepCountry;
+  if(sources.includes(keepSource)) $('#fSourceSel').value = keepSource;
+}
+
+/* ============================================================
+   상세 시트
+   ============================================================ */
 function openSheet(it){
+  curItem = it;
   const c = landed(it);
-  const sell = c.total * CFG.markup;
-  $('#shName').textContent = `${BRAND_KR[it.brand] || it.brand} ${it.kr}`;
-  $('#shCost').innerHTML = `
-    <tr><td>상품 실결제</td><td class="num">${won(c.itemKRW)}원</td></tr>
-    <tr><td>국제배송비 (${it.w}kg)</td><td class="num">${won(c.ship)}원</td></tr>
-    <tr class="${c.free?'free':''}"><td>관세</td><td class="num">${c.free ? '면세' : won(c.duty)+'원'}</td></tr>
-    <tr class="${c.free?'free':''}"><td>부가세</td><td class="num">${c.free ? '면세' : won(c.vat)+'원'}</td></tr>
-    <tr class="total"><td>최종 원가</td><td class="num">${won(c.total)}원</td></tr>
-    <tr><td>예상 판매가 (×${CFG.markup})</td><td class="num">${won(sell)}원</td></tr>`;
-  $('#shNote').textContent = `과세가격 $${Math.round(c.dutiableUSD)} · ${c.notes.join(' · ')}`;
+  $('#shName').textContent = `${brandLabel(it)} ${it.name}`;
 
-  // 구입처 — 가장 싼 곳이 자동 선택된다
-  const best = bestSource(it);
-  const m = MATCH_LABEL[it.match];
-  $('#shConf').innerHTML = `<span class="conf ${m.c}">${m.t}</span>`;
-  $('#shSrc').innerHTML = [...it.sources].sort((a,b) => a.price - b.price).map(s => `
-    <div class="src ${s === best ? 'best' : ''}">
-      <span class="shop">${s.shop}</span>
-      ${s === best ? '<span class="pick">최저</span>' : ''}
-      <span class="sp">${cur(s.price, it.cur)}</span>
-    </div>`).join('') +
-    `<div class="src"><a class="lnk" href="${best.url}" target="_blank" rel="noopener">${best.url}</a></div>`;
+  const rows = [];
+  const row = (label, value, cls) => el('tr', {class: cls || ''}, [
+    el('td', {text: label}), el('td', {class:'num', text: value})
+  ]);
+  if(c.status === 'ok'){
+    rows.push(row('상품 실결제', won(c.itemKrw) + '원'));
+    rows.push(row(`국제배송비 (${it.weightKg}kg)`, won(c.intlShippingKrw) + '원'));
+    rows.push(row('관세', c.taxFree ? '면세' : won(c.dutyKrw) + '원', c.taxFree ? 'free' : ''));
+    rows.push(row('부가세', c.taxFree ? '면세' : won(c.importVatKrw) + '원', c.taxFree ? 'free' : ''));
+    rows.push(row('최종 원가', won(c.totalKrw) + '원', 'total'));
+    rows.push(row(`예상 판매가 (×${SETTINGS.markup})`, won(c.totalKrw * SETTINGS.markup) + '원'));
+  }else{
+    rows.push(row('현지 표시가', cur(it.salePrice, it.currency)));
+    rows.push(row('최종 원가', '계산 미완료', 'total'));
+  }
+  fill($('#shCost'), rows);
+  $('#shNote').textContent = c.status === 'ok'
+    ? `과세가격 $${Math.round(c.dutiableUsd)} · ${c.notes.join(' · ')}` + (c.fxAsOf ? ` · 환율 기준 ${c.fxAsOf}` : '')
+    : (c.incompleteReason || '세금·배송 조건이 검증되지 않아 원가를 계산하지 않았습니다');
 
-  // 이미지 — 실제 배포판에서는 수집한 원본 URL이 들어간다
+  // 구입처 — 이번 버전은 사이트 하나당 소스 하나만 본다(여러 몰 교차 매칭은 다음 단계)
+  fill($('#shConf'), [el('span', {class:'conf', text:'단일 판매처 수집 — 교차 확인 안 됨'})]);
+  const srcRows = [
+    el('div', {class:'src best'}, [
+      el('span', {class:'shop', text: it.sourceShop + (it.marketCountry ? ` · ${COUNTRY_KR[it.marketCountry] || it.marketCountry}` : '')}),
+      el('span', {class:'sp', text: cur(it.salePrice, it.currency)})
+    ])
+  ];
+  const href = Urls.safeHref(it.sourceUrl);
+  if(href) srcRows.push(el('div', {class:'src'}, [
+    el('a', {class:'lnk', text: href, attrs:{href, target:'_blank', rel:'noopener noreferrer'}})
+  ]));
+  if(it.collectedAt) srcRows.push(el('p', {class:'note',
+    text: `수집 시각 ${new Date(it.collectedAt).toLocaleString('ko-KR')}${isStale(it) ? ' · 24시간이 지나 현재 가격과 다를 수 있습니다' : ''}`}));
+  if((it.warnings || []).length) srcRows.push(el('p', {class:'note', text: '수집 경고: ' + it.warnings.join(' / ')}));
+  fill($('#shSrc'), srcRows);
+
   renderImgs(it);
-  loadKoreaPrice(it, c.total);
+  loadKoreaPrice(it, c.status === 'ok' ? c.totalKrw : null);
 
   const p = buildPost(it);
   $('#postTitle').value = p.title;
@@ -1086,91 +1170,92 @@ function openSheet(it){
   $('#sheetBg').classList.add('on');
 }
 
-/* ---------- 국내 시세 비교 ----------
-   상품 하나를 열 때만 온디맨드로 조회한다(스캔 전체에 대해 하면 서버리스 타임아웃).
-   브랜드+영문 상품명 키워드 검색이라 정확도가 낮다 — 참고용으로만 쓴다. */
+/* ---------- 국내 시세 비교 ---------- */
 async function loadKoreaPrice(it, landedTotal){
-  const el = $('#shKorea');
-  el.innerHTML = '<p class="note">불러오는 중…</p>';
-  const kb = BRAND_KR[it.brand] || it.brand;
-  const q = `${kb} ${it.name}`;
+  const box = $('#shKorea');
+  fill(box, [el('p', {class:'note', text:'불러오는 중…'})]);
+  const q = `${brandLabel(it)} ${it.name}`;
   try{
-    const res = await fetch(`/api/korea-price?q=${encodeURIComponent(q)}&landedKrw=${Math.round(landedTotal)}`);
+    const url = `/api/korea-price?q=${encodeURIComponent(q)}` + (landedTotal ? `&landedKrw=${Math.round(landedTotal)}` : '');
+    const res = await fetch(url);
     const data = await res.json();
-    if(curItem !== it) return; // 응답 오는 사이 다른 상품을 열었으면 무시
+    if(curItem !== it) return;
     if(!data.available){
-      el.innerHTML = `<p class="note">${data.reason || '국내 시세를 가져오지 못했습니다.'}</p>`;
+      fill(box, [el('p', {class:'note', text: data.reason || '국내 시세를 가져오지 못했습니다.'})]);
       return;
     }
     if(!data.results.length){
-      el.innerHTML = `<p class="note">'${q}'로 검색된 국내 상품이 없습니다.</p>`;
+      fill(box, [el('p', {class:'note', text: `'${q}'로 검색된 국내 상품이 없습니다.`})]);
       return;
     }
-    const diff = data.diffKrw;
-    const diffLine = diff == null ? '' : diff < 0
-      ? `<p class="note" style="color:var(--rise)">해외가 국내 최저가보다 ${won(Math.abs(diff))}원 저렴합니다.</p>`
-      : `<p class="note" style="color:var(--mark)">국내 최저가가 ${won(diff)}원 더 저렴합니다.</p>`;
-    el.innerHTML = diffLine + data.results.slice(0, 3).map(r => `
-      <div class="src">
-        <a class="shop" href="${r.link}" target="_blank" rel="noopener">${r.mallName} · ${r.title.slice(0, 28)}</a>
-        <span class="sp">${won(r.priceKrw)}원</span>
-      </div>`).join('') +
-      `<p class="note">검색어: "${q}" — 키워드 자동 검색이라 다른 색상·모델이 섞일 수 있습니다. 링크를 눌러 직접 확인하세요.</p>`;
+    const nodes = [];
+    if(data.diffKrw !== null && data.diffKrw !== undefined){
+      nodes.push(el('p', {class:'note', style: data.diffKrw < 0 ? 'color:var(--rise)' : 'color:var(--mark)',
+        text: data.diffKrw < 0
+          ? `해외가 국내 최저가보다 ${won(Math.abs(data.diffKrw))}원 저렴합니다.`
+          : `국내 최저가가 ${won(data.diffKrw)}원 더 저렴합니다.`}));
+    }
+    data.results.slice(0, 3).forEach(r => {
+      const link = Urls.safeHref(r.link);
+      const label = `${r.mallName} · ${String(r.title).slice(0, 28)}`;
+      nodes.push(el('div', {class:'src'}, [
+        link ? el('a', {class:'shop', text: label, attrs:{href: link, target:'_blank', rel:'noopener noreferrer'}})
+             : el('span', {class:'shop', text: label}),
+        el('span', {class:'sp', text: won(r.priceKrw) + '원'})
+      ]));
+    });
+    nodes.push(el('p', {class:'note', text: `검색어: "${q}" — 키워드 자동 검색이라 다른 색상·모델이 섞일 수 있습니다.`}));
+    fill(box, nodes);
   }catch(e){
     if(curItem !== it) return;
-    el.innerHTML = '<p class="note">국내 시세 조회 실패</p>';
+    fill(box, [el('p', {class:'note', text:'국내 시세 조회 실패'})]);
   }
 }
-/* ---------- 이미지 ----------
-   it.imgs는 스캔으로 수집한 원본 이미지 URL 배열이다. */
-let curItem = null;
-let selImgs = new Set();
 
-function renderImgs(it){
-  curItem = it;
-  const urls = Array.isArray(it.imgs) ? it.imgs : [];
-  const n = urls.length;
-  selImgs = new Set(Array.from({length: n}, (_, k) => k));
-  $('#shImgCount').textContent = n ? `${n}장 수집됨` : '이미지 없음';
-  $('#shImgs').innerHTML = urls.map((url, i) =>
-    `<button class="imgcell ${selImgs.has(i) ? 'on' : ''}" data-i="${i}" aria-label="${i+1}번 이미지">
-      <img src="${url}" alt="" loading="lazy"><span class="mark">${selImgs.has(i) ? '✓' : ''}</span>
-    </button>`).join('');
-  $('#shImgs').querySelectorAll('.imgcell').forEach(c => {
-    c.onclick = () => {
-      const i = +c.dataset.i;
-      if(selImgs.has(i)){ selImgs.delete(i); c.classList.remove('on'); c.querySelector('.mark').textContent = ''; }
-      else { selImgs.add(i); c.classList.add('on'); c.querySelector('.mark').textContent = '✓'; }
-    };
-  });
+/* ---------- 이미지 ---------- */
+function safeImages(it){
+  return (it.imageUrls || []).map(u => Urls.safeImageUrl(u)).filter(Boolean);
 }
-
+function renderImgs(it){
+  const urls = safeImages(it);
+  selImgs = new Set(urls.map((_, k) => k));
+  $('#shImgCount').textContent = urls.length ? `${urls.length}장 수집됨` : '이미지 없음';
+  fill($('#shImgs'), urls.map((url, i) => {
+    const mark = el('span', {class:'mark', text:'✓'});
+    const cell = el('button', {class:'imgcell on', attrs:{'data-i': String(i), 'aria-label': `${i+1}번 이미지`}}, [
+      el('img', {attrs:{src: url, alt:'', loading:'lazy'}}), mark
+    ]);
+    cell.addEventListener('click', () => {
+      if(selImgs.has(i)){ selImgs.delete(i); cell.classList.remove('on'); mark.textContent = ''; }
+      else { selImgs.add(i); cell.classList.add('on'); mark.textContent = '✓'; }
+    });
+    return cell;
+  }));
+}
 $('#imgAll').onclick = () => {
-  const n = curItem.imgs.length;
-  const all = selImgs.size === n;
-  selImgs = all ? new Set() : new Set(Array.from({length: n}, (_, k) => k));
+  if(!curItem) return;
+  const urls = safeImages(curItem);
+  const all = selImgs.size === urls.length;
+  selImgs = all ? new Set() : new Set(urls.map((_, k) => k));
   $('#shImgs').querySelectorAll('.imgcell').forEach(c => {
     const on = selImgs.has(+c.dataset.i);
     c.classList.toggle('on', on);
     c.querySelector('.mark').textContent = on ? '✓' : '';
   });
 };
-
 $('#imgSave').onclick = async () => {
-  if(!selImgs.size){ toast('선택된 이미지가 없습니다'); return; }
-  const idx = [...selImgs].sort((a, b) => a - b);
-  const urls = idx.map(i => curItem.imgs[i]);
-
+  if(!curItem || !selImgs.size){ toast('선택된 이미지가 없습니다'); return; }
+  const urls = [...selImgs].sort((a, b) => a - b).map(i => safeImages(curItem)[i]);
   try{
     const files = await Promise.all(urls.map(async (url, k) => {
       const res = await fetch(url);
       if(!res.ok) throw new Error('fetch failed');
       const blob = await res.blob();
       const ext = (blob.type.split('/')[1] || 'jpg').split('+')[0];
-      return new File([blob], `${curItem.brand.replace(/[^\w]/g, '')}_${curItem.sku}_${k + 1}.${ext}`, {type: blob.type});
+      return new File([blob], `${String(curItem.brand).replace(/[^\w]/g, '')}_${curItem.sku || 'item'}_${k + 1}.${ext}`, {type: blob.type});
     }));
     if(navigator.canShare && navigator.canShare({files})){
-      try{ await navigator.share({files, title: curItem.kr}); return; }catch(e){ if(e.name === 'AbortError') return; throw e; }
+      try{ await navigator.share({files, title: curItem.name}); return; }catch(e){ if(e.name === 'AbortError') return; throw e; }
     }
     files.forEach(f => {
       const a = document.createElement('a');
@@ -1179,8 +1264,7 @@ $('#imgSave').onclick = async () => {
     });
     toast(`${files.length}장 저장됨`);
   }catch(e){
-    // 이미지 서버가 CORS를 막아 직접 가져오지 못하면 새 탭에서 열어 수동 저장하게 한다
-    urls.forEach(u => window.open(u, '_blank'));
+    urls.forEach(u => window.open(u, '_blank', 'noopener'));
     toast('이미지를 새 탭에서 열었습니다. 길게 눌러 저장하세요');
   }
 };
@@ -1208,12 +1292,8 @@ $('#copyTitle').onclick = () => copy($('#postTitle').value, '제목');
 $('#copyBody').onclick  = () => copy($('#postBody').value, '본문');
 $('#copyAll').onclick   = () => copy($('#postTitle').value + '\n\n' + $('#postBody').value, '전체');
 
-/* ---------- 이미지 + 글 함께 복사 ----------
-   Clipboard API의 text/html에 <img> 태그(base64)와 텍스트를 함께 담아 쓴다.
-   리치텍스트 붙여넣기를 지원하는 에디터에서만 이미지+글이 함께 들어간다 —
-   지원 안 하는 곳은 브라우저가 알아서 text/plain으로 떨어지거나, 우리가 직접 글만 복사로 폴백한다. */
 function escapeHtml(s){
-  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 function blobToDataURL(blob){
   return new Promise((resolve, reject) => {
@@ -1228,8 +1308,7 @@ $('#copyWithImages').onclick = async () => {
   const title = $('#postTitle').value;
   const body = $('#postBody').value;
   const plainText = title + '\n\n' + body;
-
-  const urls = curItem ? [...selImgs].sort((a, b) => a - b).map(i => curItem.imgs[i]) : [];
+  const urls = curItem ? [...selImgs].sort((a, b) => a - b).map(i => safeImages(curItem)[i]) : [];
   if(!urls.length){ await copy(plainText, '글'); return; }
 
   btn.disabled = true;
@@ -1244,16 +1323,10 @@ $('#copyWithImages').onclick = async () => {
       }catch(e){ return null; }
     }))).filter(Boolean);
 
-    if(!dataUrls.length){
-      await copy(plainText, '글 (이미지는 못 가져옴)');
-      return;
-    }
-    if(!(navigator.clipboard && window.ClipboardItem)){
-      await copy(plainText, '글 (이 브라우저는 이미지 복사 미지원)');
-      return;
-    }
+    if(!dataUrls.length){ await copy(plainText, '글 (이미지는 못 가져옴)'); return; }
+    if(!(navigator.clipboard && window.ClipboardItem)){ await copy(plainText, '글 (이 브라우저는 이미지 복사 미지원)'); return; }
 
-    const imgHtml = dataUrls.map(d => `<img src="${d}" style="max-width:100%"><br>`).join('');
+    const imgHtml = dataUrls.map(d => `<img src="${escapeHtml(d)}" style="max-width:100%"><br>`).join('');
     const html = `<div>${escapeHtml(title)}</div><br>${imgHtml}<br><div style="white-space:pre-wrap">${escapeHtml(body)}</div>`;
     await navigator.clipboard.write([
       new ClipboardItem({
@@ -1281,7 +1354,8 @@ document.querySelectorAll('nav button').forEach(b => b.onclick = () => go(b.data
 /* ---------- 설정 ---------- */
 function saveCfg(){
   try{ localStorage.setItem('radar-cfg', JSON.stringify({
-    fx: CFG.fx, mode: CFG.mode, markup: CFG.markup, theme: document.documentElement.dataset.theme || 'auto'
+    fxOverride: SETTINGS.fxOverride, mode: SETTINGS.mode, markup: SETTINGS.markup,
+    theme: document.documentElement.dataset.theme || 'auto'
   })); }catch(e){}
 }
 function loadCfg(){
@@ -1289,23 +1363,24 @@ function loadCfg(){
     const raw = localStorage.getItem('radar-cfg');
     if(!raw) return;
     const s = JSON.parse(raw);
-    if(s.fx) Object.assign(CFG.fx, s.fx);
-    if(s.mode) CFG.mode = s.mode;
-    if(s.markup) CFG.markup = s.markup;
+    if(s.fxOverride) SETTINGS.fxOverride = s.fxOverride;
+    if(s.mode) SETTINGS.mode = s.mode;
+    if(s.markup) SETTINGS.markup = s.markup;
     if(s.theme && s.theme !== 'auto') document.documentElement.dataset.theme = s.theme;
-    $('#fxUSD').value = CFG.fx.USD; $('#fxEUR').value = CFG.fx.EUR;
-    $('#markup').value = CFG.markup;
-    document.querySelectorAll('#modeSeg button').forEach(b => b.classList.toggle('on', b.dataset.mode === CFG.mode));
+    if(SETTINGS.fxOverride.USD) $('#fxUSD').value = SETTINGS.fxOverride.USD;
+    if(SETTINGS.fxOverride.EUR) $('#fxEUR').value = SETTINGS.fxOverride.EUR;
+    $('#markup').value = SETTINGS.markup;
+    document.querySelectorAll('#modeSeg button').forEach(b => b.classList.toggle('on', b.dataset.mode === SETTINGS.mode));
     document.querySelectorAll('#themeSeg button').forEach(b => b.classList.toggle('on', b.dataset.theme === (s.theme || 'auto')));
   }catch(e){}
 }
-$('#fxUSD').oninput = e => { CFG.fx.USD = +e.target.value || 1380; renderItems(); saveCfg(); };
-$('#fxEUR').oninput = e => { CFG.fx.EUR = +e.target.value || 1490; renderItems(); saveCfg(); };
-$('#markup').oninput = e => { CFG.markup = +e.target.value || 1.6; saveCfg(); };
+$('#fxUSD').oninput = e => { SETTINGS.fxOverride.USD = +e.target.value || 0; renderItems(false); saveCfg(); };
+$('#fxEUR').oninput = e => { SETTINGS.fxOverride.EUR = +e.target.value || 0; renderItems(false); saveCfg(); };
+$('#markup').oninput = e => { SETTINGS.markup = +e.target.value || 1.6; saveCfg(); };
 document.querySelectorAll('#modeSeg button').forEach(b => b.onclick = () => {
-  CFG.mode = b.dataset.mode;
+  SETTINGS.mode = b.dataset.mode;
   document.querySelectorAll('#modeSeg button').forEach(x => x.classList.toggle('on', x === b));
-  renderItems(); saveCfg();
+  renderItems(false); saveCfg();
 });
 document.querySelectorAll('#themeSeg button').forEach(b => b.onclick = () => {
   const t = b.dataset.theme;
@@ -1315,102 +1390,99 @@ document.querySelectorAll('#themeSeg button').forEach(b => b.onclick = () => {
   saveCfg();
 });
 
-/* ---------- 스캔 — /api/scan 을 호출해 실제 세일 상품을 가져온다 ---------- */
-function mapApiItem(apiItem){
+/* ============================================================
+   스캔 — /api/scan을 조각(chunk) 단위로 끝까지 이어받는다.
+   한 조각은 한 판매처의 한 페이지다. 조각 하나를 완전 스냅샷으로 쓰지 않는다.
+   ============================================================ */
+const MAX_CHUNKS = 40; // 한 번의 조회에서 이어받을 최대 조각 수 (무한 루프 방지)
+
+async function runChunkedScan(params, onProgress){
+  const acc = Merge.createAccumulator('scan-' + Date.now());
+  const errors = [];
+  let cursor = null;
+  let chunks = 0;
+  let finished = false;
+  let meta = null;
+
+  while(chunks < MAX_CHUNKS){
+    const qs = new URLSearchParams(Object.assign({mode: SETTINGS.mode}, params));
+    if(cursor) qs.set('cursor', cursor);
+    const res = await fetch('/api/scan?' + qs.toString());
+    if(!res.ok) throw new Error('서버 오류 (HTTP ' + res.status + ')');
+    const data = await res.json();
+    meta = data;
+    chunks++;
+
+    const validated = Schema.validateResult({
+      schemaVersion: data.schemaVersion,
+      collectedAt: data.collectedAt || data.scannedAt,
+      sourceResults: data.sourceResults,
+      items: data.items
+    });
+    // 상품이 0건인 조각(실패·빈 페이지)도 판매처 상태는 누적해야 진행률과 진단이 맞는다
+    acc.add({
+      items: validated.ok ? validated.result.items : [],
+      sourceResults: validated.ok ? validated.result.sourceResults : (data.sourceResults || [])
+    });
+    if(!validated.ok && (data.items || []).length){
+      errors.push({sourceId:'(응답)', brand:'응답 형식', error: validated.errors[0]});
+    }
+
+    (data.errors || []).forEach(e => errors.push(e));
+    if(onProgress) onProgress({chunks, items: acc.size, planned: (data.plannedSources || []).length, cursor: data.nextCursor});
+
+    cursor = data.nextCursor;
+    if(!cursor){ finished = true; break; }
+  }
+  if(!finished) acc.abort();
+
   return {
-    brand: apiItem.brand,
-    name: apiItem.name,
-    kr: apiItem.name,           // 한글 번역은 하지 않는다. 게시글 작성 시 직접 다듬을 것
-    sku: apiItem.sku,
-    list: apiItem.listPrice,
-    cur: apiItem.currency,
-    region: apiItem.region,
-    cat: apiItem.category,
-    w: apiItem.weightKg,
-    sizes: apiItem.sizes || '',
-    color: apiItem.color || '',
-    imgs: apiItem.imageUrls || [],
-    onSale: !!apiItem.onSale,   // 세일 아니어도(환율·기본가가 싸서) 상품탭엔 뜬다
-    match: 'single', // 이번 버전은 사이트 하나만 조회한다 — 여러 몰 교차 매칭(PRD 6장)은 다음 단계
-    sources: [{shop: apiItem.sourceShop, price: apiItem.salePrice, url: apiItem.sourceUrl}]
+    result: acc.finalize(finished),
+    finished,
+    chunks,
+    errors,
+    meta: meta ? {
+      sitesOk: (acc.finalize(finished).sourceResults || []).filter(r => r.status === 'ok' || r.status === 'empty').length,
+      sitesTotal: (acc.finalize(finished).sourceResults || []).length,
+      sitesFailed: errors.length,
+      itemCount: acc.size,
+      fxRates: meta.fxRates,
+      fxSource: meta.fxSource,
+      fxAsOf: meta.fxAsOf,
+      errors
+    } : null
   };
 }
 
-// "Sale중" 탭은 실제 세일 상품만 집계한다 — 정가 상품이 섞이면 세일 감지 숫자가 왜곡된다.
-function buildSignals(items){
-  const map = {};
-  items.filter(it => it.onSale).forEach(it => {
-    if(!map[it.brand]) map[it.brand] = {brand: it.brand, count: 0, maxOff: 0};
-    map[it.brand].count++;
-    map[it.brand].maxOff = Math.max(map[it.brand].maxOff, off(it));
-  });
-  return Object.values(map).sort((a, b) => b.count - a.count);
+function applyFxRates(fxRates, fxAsOf, fxSource){
+  if(!fxRates || !COST_CFG) return;
+  COST_CFG.fx.base_rate = Object.assign({}, COST_CFG.fx.base_rate, fxRates);
+  if(fxAsOf) COST_CFG.fx.as_of = fxAsOf;
+  if(fxSource) COST_CFG.fx.source = fxSource;
+  // 사용자가 직접 넣은 환율이 없을 때만 화면 값을 갱신한다
+  if(!SETTINGS.fxOverride.USD) $('#fxUSD').value = Math.round(fxRates.USD);
+  if(!SETTINGS.fxOverride.EUR) $('#fxEUR').value = Math.round(fxRates.EUR);
+  $('#cfgStatus').textContent = `환율 ${fxSource || ''}${fxAsOf ? ' · 기준일 ' + fxAsOf : ''}`;
 }
 
-// 스캔 시점 실시간 환율을 반영한다 — 서버가 못 가져왔으면 fxRates가 cost.yaml 고정값 그대로 온다.
-// 어느 스캔(Sale중/상품)이든 최신 환율이면 반영해서 손해볼 게 없다.
-function applyFxRates(fxRates){
-  if(!fxRates) return;
-  CFG.fx.USD = Math.round(fxRates.USD);
-  CFG.fx.EUR = Math.round(fxRates.EUR);
-  CFG.fx.JPY = Math.round(fxRates.JPY * 100) / 100;
-  $('#fxUSD').value = CFG.fx.USD;
-  $('#fxEUR').value = CFG.fx.EUR;
-  saveCfg();
-}
-
-function toItems(apiItems){
-  const items = (apiItems || []).map(mapApiItem);
-  items.forEach(it => { it.sale = bestSource(it).price; it.type = detectType(it); });
-  return items;
-}
-
-/* ---------- 로컬 크롤러 결과 가져오기 (설정 탭) ----------
-   scripts/local-crawler/crawl.js가 만든 JSON을 읽어 상품탭 목록에 합친다.
-   같은 사이트를 다시 크롤링해 가져오면 그 사이트 것만 교체된다. */
-$('#importFile').addEventListener('change', async (e) => {
-  const file = e.target.files && e.target.files[0];
-  const out = $('#importResult');
-  if(!file) return;
-  try{
-    const data = JSON.parse(await file.text());
-    const imported = toItems(data.items);
-    if(!imported.length) throw new Error('items가 비어 있습니다');
-    const shopOf = it => (it.sources[0] || {}).shop;
-    const shops = new Set(imported.map(shopOf));
-    ITEMS = ITEMS.filter(it => !shops.has(shopOf(it))).concat(imported);
-    renderItems();
-    out.style.display = 'block';
-    out.textContent = `${imported.length}건을 가져왔습니다. 상품 탭에서 확인하세요.`;
-  }catch(err){
-    out.style.display = 'block';
-    out.textContent = '가져오기 실패: ' + err.message;
-  }finally{
-    e.target.value = '';
-  }
-});
-
-/* ---------- Sale중 탭 전용 스캔 (헤더 스캔 버튼) ----------
-   인기 브랜드만 조회한다. 상품탭(ITEMS)은 절대 건드리지 않는다 — 두 탭은 완전히 분리돼 있다. */
+/* Sale중 탭 전용 스캔 — 인기 브랜드만. 상품탭은 건드리지 않는다. */
 async function runScan(){
   const b = $('#scanBtn');
   b.disabled = true; b.textContent = '스캔 중';
   try{
-    const res = await fetch('/api/scan?onlyPopular=1');
-    if(!res.ok) throw new Error('서버 오류 (HTTP ' + res.status + ')');
-    const data = await res.json();
-
-    SIGNAL_ITEMS = toItems(data.items);
-    SIGNALS = buildSignals(SIGNAL_ITEMS);
-    lastSignalScanMeta = data;
-    applyFxRates(data.fxRates);
+    const run = await runChunkedScan({onlyPopular: '1'}, p => { b.textContent = `스캔 ${p.chunks}`; });
+    const merged = Merge.mergeResult(SIGNAL_STATE, run.result);
+    SIGNAL_STATE = merged.state;
+    SIGNALS = buildSignals(SIGNAL_STATE.items);
+    lastSignalScanMeta = run.meta;
+    applyFxRates(run.meta && run.meta.fxRates, run.meta && run.meta.fxAsOf, run.meta && run.meta.fxSource);
+    await saveState();
 
     const now = new Date();
-    $('#scanTime').textContent =
-      `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')} 스캔`;
-    toast(data.sitesFailed
-      ? `${data.sitesOk}/${data.sitesTotal} 사이트 확인 · ${data.itemCount}건 발견`
-      : `${data.sitesOk}개 사이트에서 ${data.itemCount}건 발견`);
+    $('#scanTime').textContent = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')} 스캔`;
+    toast(run.finished
+      ? `${run.meta.sitesOk}곳 확인 · ${run.meta.itemCount}건 발견`
+      : `${run.chunks}조각까지만 확인 (계속하려면 다시 스캔)`);
   }catch(e){
     toast('스캔 실패: ' + e.message);
   }finally{
@@ -1420,48 +1492,115 @@ async function runScan(){
 }
 $('#scanBtn').onclick = runScan;
 
-/* ---------- 상품탭 전용 조회 (드롭다운 확인 버튼) ----------
-   브랜드를 지정하면 그 브랜드 사이트를 캡 없이 전부 훑고, 지정 안 하면 전체 브랜드를
-   훑는다(할인·저가 우선 캡 적용). Sale중 탭(SIGNALS)은 절대 건드리지 않는다. */
+/* 상품탭 전용 조회 — 확인 버튼. Sale중은 건드리지 않는다. */
 async function runProductSearch(){
   const btn = $('#dropConfirmBtn');
-  const brand = $('#fBrandSel').value;
+  const brandId = $('#fBrandSel').value;
+  const country = $('#fCountrySel').value;
+  const sourceId = $('#fSourceSel').value;
   btn.disabled = true;
   const orig = btn.textContent;
   btn.textContent = '조회 중…';
   try{
-    const url = brand ? `/api/scan?brand=${encodeURIComponent(brand)}` : '/api/scan';
-    const res = await fetch(url);
-    if(!res.ok) throw new Error('서버 오류 (HTTP ' + res.status + ')');
-    const data = await res.json();
+    const params = {};
+    if(brandId) params.brand = brandId;
+    if(country) params.marketCountry = country;
+    if(sourceId) params.sourceId = sourceId;
+    const run = await runChunkedScan(params, p => { btn.textContent = `조회 중 ${p.items}건`; });
 
-    const found = toItems(data.items);
-    if(brand){
-      // 이 브랜드의 이전 결과만 갈아끼운다 — 다른 브랜드로 이미 불러온 상품은 그대로 둔다.
-      ITEMS = ITEMS.filter(it => it.brand !== brand).concat(found);
-    } else {
-      ITEMS = found;
-    }
-    lastProductScanMeta = data;
-    applyFxRates(data.fxRates);
+    // 부분 실패든 성공이든 병합만 한다 — 기존 상품(특히 PC 수집분)을 지우지 않는다
+    const merged = Merge.mergeResult(PRODUCT_STATE, run.result);
+    PRODUCT_STATE = merged.state;
+    lastProductScanMeta = run.meta;
+    applyFxRates(run.meta && run.meta.fxRates, run.meta && run.meta.fxAsOf, run.meta && run.meta.fxSource);
+    await saveState();
 
-    toast(data.sitesFailed
-      ? `${data.sitesOk}/${data.sitesTotal} 사이트 확인 · ${data.itemCount}건 조회됨`
-      : `${data.sitesOk}개 사이트에서 ${data.itemCount}건 조회됨`);
+    toast(run.finished
+      ? `${run.meta.sitesOk}곳에서 ${run.meta.itemCount}건 조회 (추가 ${merged.added} / 갱신 ${merged.updated})`
+      : `${run.chunks}조각까지만 확인 · ${run.meta.itemCount}건`);
   }catch(e){
     toast('조회 실패: ' + e.message);
   }finally{
     btn.disabled = false;
     btn.textContent = orig;
+    refreshDataDrivenFilters();
     renderItems();
   }
 }
 $('#dropConfirmBtn').onclick = runProductSearch;
 
-loadCfg();
-populateDropdownFilters();
-renderSignals();
-renderItems();
+/* ============================================================
+   수집 결과 가져오기 (PC 크롤러 / 피드 변환기 JSON)
+   전부 검증한 뒤에만 반영한다. 실패하면 기존 상태를 그대로 둔다.
+   ============================================================ */
+$('#importFile').addEventListener('change', async (e) => {
+  const file = e.target.files && e.target.files[0];
+  const out = $('#importResult');
+  if(!file) return;
+  out.style.display = 'block';
+  try{
+    if(file.size > Schema.LIMITS.MAX_FILE_BYTES){
+      throw new Error(`파일이 너무 큽니다 (${Math.round(file.size/1048576)}MB > ${Schema.LIMITS.MAX_FILE_BYTES/1048576}MB). 수집을 나눠서 가져오세요`);
+    }
+    const parsed = JSON.parse(await file.text());
+    const validated = Schema.validateResult(parsed);
+    if(!validated.ok) throw new Error(validated.errors.join(' / '));
+
+    const merged = Merge.mergeResult(PRODUCT_STATE, validated.result);
+    PRODUCT_STATE = merged.state;
+    await saveState();
+    refreshDataDrivenFilters();
+    renderItems();
+    out.textContent = `가져오기 완료: 추가 ${merged.added} · 갱신 ${merged.updated}` +
+      (merged.removed ? ` · 정리 ${merged.removed}` : '') +
+      (validated.warnings.length ? ` — ${validated.warnings.join(' / ')}` : '');
+  }catch(err){
+    out.textContent = '가져오기 실패 (기존 데이터는 그대로 유지됩니다): ' + err.message;
+  }finally{
+    e.target.value = '';
+  }
+});
+
+$('#clearData').onclick = async () => {
+  PRODUCT_STATE = Merge.emptyState();
+  lastProductScanMeta = null;
+  await saveState();
+  refreshDataDrivenFilters();
+  renderItems();
+  toast('상품 목록을 비웠습니다');
+};
+
+/* ---------- 입력 ---------- */
+let qTimer;
+$('#q').oninput = e => {
+  const v = e.target.value;
+  renderBrandSuggest(v);
+  clearTimeout(qTimer);
+  qTimer = setTimeout(() => { query = v; renderItems(); }, 180);
+};
+$('#qClear').onclick = () => {
+  query = ''; $('#q').value = '';
+  $('#brandSuggest').classList.remove('on'); clear($('#brandSuggest'));
+  renderItems(); $('#q').focus();
+};
+$('#fSortSel').addEventListener('change', () => renderItems(false));
+$('#sigSortSel').addEventListener('change', () => renderSignals());
+/* 필터는 이미 가지고 있는 상품에 즉시 적용된다(브랜드·국가·판매처·종류·가격대 AND 조합).
+   '확인'은 그 조건으로 서버에서 새로 가져오는 버튼이다. */
+['#fBrandSel','#fTypeSel','#fPriceSel','#fCountrySel','#fSourceSel'].forEach(sel =>
+  $(sel).addEventListener('change', () => renderItems()));
+
+/* ---------- 시작 ---------- */
+(async function init(){
+  loadCfg();
+  populateDropdownFilters();
+  await restoreState();
+  refreshDataDrivenFilters();
+  renderSignals();
+  renderItems();
+  await loadCostConfig();
+  renderItems(false);
+})();
 </script>
 </body>
 </html>

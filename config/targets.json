@@ -1,937 +1,2957 @@
 {
-  "_readme": "크롤링 대상 사이트 목록. 여기만 고치면 코드는 건드릴 필요 없다. platform이 'shopify'인 사이트만 api/scan.js가 수집한다. verified: 'confirmed'=Shopify 사용이 널리 알려진 곳 / 'unconfirmed'=시도는 하되 실제 동작 여부는 배포 후 확인 필요(막히면 errors에 표시됨). 이 세션은 외부 네트워크가 막혀 있어 직접 접속 검증을 하지 못했다 — 배포 후 스캔 버튼을 눌러 실제 동작 여부를 확인할 것. Shopbop·Nordstrom Rack·Saks OFF 5TH 같은 대형 종합몰은 자체 플랫폼+안티봇(Akamai/PerimeterX)을 쓰는 경우가 대부분이라 이 방식(공개 products.json)으로는 수집이 안 되어 목록에서 제외했다 — PRD.md 11장 리스크에도 명시된 사항.",
-  "sites": [
+  "_readme": "판매처(소스) 정본 목록. 서버 스캔(api/scan.js), PC 크롤러(scripts/local-crawler), 웹 필터가 모두 이 파일 하나를 읽는다. 예전 scripts/local-crawler/sites.json은 여기로 이관됐다.",
+  "_fields": {
+    "sourceId": "안정적인 판매처 ID. 스캔 cursor·CLI --source·필터에서 이 값을 쓴다",
+    "kind": "official=브랜드 공식몰(brandId가 그 브랜드) / multi_brand=편집숍(실제 브랜드는 상품에서 읽는다)",
+    "marketCountry": "실제 쇼핑 시장(국가). 통화·출고국·브랜드 국적과 다를 수 있다. 확인 안 되면 null",
+    "region": "원가 계산 프로필(US/EU/JP). null이면 세금·배대지 조건 미검증 → 원가 계산 미완료로 표시된다(예: GB)",
+    "adapter": "shopify-products-json | jsonld-browser | rei-us",
+    "runtime": "server=Vercel 서버리스에서 조회 / pc=사용자 PC의 Playwright 수집기",
+    "support.status": "supported=실제 수집으로 확인됨 / unverified=미확인 / blocked=실제 요청이 막힘(스캔 제외)",
+    "support.checkedAt": "실제로 확인한 날짜. 확인한 적이 없으면 null"
+  },
+  "_support_note": "support.status=supported는 실제 수집 결과(상품 20개·표본 대조)를 확인한 뒤에만 붙인다. 등록만으로 supported로 올리지 않는다.",
+  "_japan_note": "일본은 Shopify 공식몰 후보가 드물어 PC 브라우저 수집(BEAMS·United Arrows·Magaseek)으로 검증한다. 라쿠텐 공식 API 연동은 별도 구현이 필요하다.",
+  "schemaVersion": 2,
+  "sources": [
     {
-      "brand": "Reformation",
-      "brand_kr": "레포메이션",
+      "sourceId": "reformation-us",
+      "shopName": "Reformation",
+      "shopName_kr": "레포메이션",
+      "kind": "official",
+      "brandId": "reformation",
+      "marketCountry": "US",
+      "locale": "en-US",
+      "currency": "USD",
+      "region": "US",
+      "baseUrl": "https://www.thereformation.com",
       "domain": "www.thereformation.com",
-      "region": "US",
-      "currency": "USD",
+      "allowedHosts": [
+        "www.thereformation.com"
+      ],
+      "adapter": "shopify-products-json",
+      "runtime": "server",
+      "listingUrls": [],
       "category": "apparel",
-      "platform": "shopify",
-      "verified": "blocked",
       "popular": true,
-      "blocked_error": "HTTP 404",
-      "blocked_checked_at": "2026-09-03"
+      "support": {
+        "status": "blocked",
+        "checkedAt": "2026-09-03",
+        "environment": "vercel-serverless",
+        "error": "HTTP 404",
+        "note": "실제 배포 스캔에서 실패 — 서버사이드 요청 자체가 막히는 것으로 보인다"
+      }
     },
     {
-      "brand": "AllSaints",
-      "brand_kr": "올세인츠",
+      "sourceId": "allsaints-us",
+      "shopName": "AllSaints",
+      "shopName_kr": "올세인츠",
+      "kind": "official",
+      "brandId": "allsaints",
+      "marketCountry": "US",
+      "locale": "en-US",
+      "currency": "USD",
+      "region": "US",
+      "baseUrl": "https://www.us.allsaints.com",
       "domain": "www.us.allsaints.com",
-      "region": "US",
-      "currency": "USD",
+      "allowedHosts": [
+        "www.us.allsaints.com"
+      ],
+      "adapter": "shopify-products-json",
+      "runtime": "server",
+      "listingUrls": [],
       "category": "apparel",
-      "platform": "shopify",
-      "verified": "blocked",
       "popular": true,
-      "blocked_error": "HTTP 403",
-      "blocked_checked_at": "2026-09-03"
+      "support": {
+        "status": "blocked",
+        "checkedAt": "2026-09-03",
+        "environment": "vercel-serverless",
+        "error": "HTTP 403",
+        "note": "실제 배포 스캔에서 실패 — 서버사이드 요청 자체가 막히는 것으로 보인다"
+      }
     },
     {
-      "brand": "Ganni",
-      "brand_kr": "가니",
+      "sourceId": "ganni-us",
+      "shopName": "Ganni",
+      "shopName_kr": "가니",
+      "kind": "official",
+      "brandId": "ganni",
+      "marketCountry": "US",
+      "locale": "en-US",
+      "currency": "USD",
+      "region": "US",
+      "baseUrl": "https://us.ganni.com",
       "domain": "us.ganni.com",
-      "region": "US",
-      "currency": "USD",
+      "allowedHosts": [
+        "us.ganni.com"
+      ],
+      "adapter": "shopify-products-json",
+      "runtime": "server",
+      "listingUrls": [],
       "category": "apparel",
-      "platform": "shopify",
-      "verified": "blocked",
       "popular": true,
-      "blocked_error": "fetch failed",
-      "blocked_checked_at": "2026-09-03"
+      "support": {
+        "status": "blocked",
+        "checkedAt": "2026-09-03",
+        "environment": "vercel-serverless",
+        "error": "fetch failed",
+        "note": "실제 배포 스캔에서 실패 — 서버사이드 요청 자체가 막히는 것으로 보인다"
+      }
     },
     {
-      "brand": "Kith",
-      "brand_kr": "키스",
+      "sourceId": "kith-us",
+      "shopName": "Kith",
+      "shopName_kr": "키스",
+      "kind": "official",
+      "brandId": "kith",
+      "marketCountry": "US",
+      "locale": "en-US",
+      "currency": "USD",
+      "region": "US",
+      "baseUrl": "https://kith.com",
       "domain": "kith.com",
-      "region": "US",
-      "currency": "USD",
+      "allowedHosts": [
+        "kith.com"
+      ],
+      "adapter": "shopify-products-json",
+      "runtime": "server",
+      "listingUrls": [],
       "category": "apparel",
-      "platform": "shopify",
-      "verified": "confirmed"
+      "popular": false,
+      "support": {
+        "status": "unverified",
+        "checkedAt": null,
+        "environment": null,
+        "error": null,
+        "note": "Shopify 사용이 널리 알려진 곳. 실제 응답은 아직 확인되지 않음"
+      }
     },
     {
-      "brand": "Fashion Nova",
-      "brand_kr": "패션노바",
+      "sourceId": "fashion-nova-us",
+      "shopName": "Fashion Nova",
+      "shopName_kr": "패션노바",
+      "kind": "official",
+      "brandId": "fashion-nova",
+      "marketCountry": "US",
+      "locale": "en-US",
+      "currency": "USD",
+      "region": "US",
+      "baseUrl": "https://www.fashionnova.com",
       "domain": "www.fashionnova.com",
-      "region": "US",
-      "currency": "USD",
+      "allowedHosts": [
+        "www.fashionnova.com"
+      ],
+      "adapter": "shopify-products-json",
+      "runtime": "server",
+      "listingUrls": [],
       "category": "apparel",
-      "platform": "shopify",
-      "verified": "confirmed"
+      "popular": false,
+      "support": {
+        "status": "unverified",
+        "checkedAt": null,
+        "environment": null,
+        "error": null,
+        "note": "Shopify 사용이 널리 알려진 곳. 실제 응답은 아직 확인되지 않음"
+      }
     },
     {
-      "brand": "Nasty Gal",
-      "brand_kr": "나스티갤",
+      "sourceId": "nasty-gal-us",
+      "shopName": "Nasty Gal",
+      "shopName_kr": "나스티갤",
+      "kind": "official",
+      "brandId": "nasty-gal",
+      "marketCountry": "US",
+      "locale": "en-US",
+      "currency": "USD",
+      "region": "US",
+      "baseUrl": "https://www.nastygal.com",
       "domain": "www.nastygal.com",
-      "region": "US",
-      "currency": "USD",
+      "allowedHosts": [
+        "www.nastygal.com"
+      ],
+      "adapter": "shopify-products-json",
+      "runtime": "server",
+      "listingUrls": [],
       "category": "apparel",
-      "platform": "shopify",
-      "verified": "confirmed"
+      "popular": false,
+      "support": {
+        "status": "unverified",
+        "checkedAt": null,
+        "environment": null,
+        "error": null,
+        "note": "Shopify 사용이 널리 알려진 곳. 실제 응답은 아직 확인되지 않음"
+      }
     },
     {
-      "brand": "Princess Polly",
-      "brand_kr": "프린세스폴리",
+      "sourceId": "princess-polly-us",
+      "shopName": "Princess Polly",
+      "shopName_kr": "프린세스폴리",
+      "kind": "official",
+      "brandId": "princess-polly",
+      "marketCountry": "US",
+      "locale": "en-US",
+      "currency": "USD",
+      "region": "US",
+      "baseUrl": "https://us.princesspolly.com",
       "domain": "us.princesspolly.com",
-      "region": "US",
-      "currency": "USD",
+      "allowedHosts": [
+        "us.princesspolly.com"
+      ],
+      "adapter": "shopify-products-json",
+      "runtime": "server",
+      "listingUrls": [],
       "category": "apparel",
-      "platform": "shopify",
-      "verified": "confirmed"
+      "popular": false,
+      "support": {
+        "status": "unverified",
+        "checkedAt": null,
+        "environment": null,
+        "error": null,
+        "note": "Shopify 사용이 널리 알려진 곳. 실제 응답은 아직 확인되지 않음"
+      }
     },
     {
-      "brand": "Gymshark",
-      "brand_kr": "짐샤크",
+      "sourceId": "gymshark-us",
+      "shopName": "Gymshark",
+      "shopName_kr": "짐샤크",
+      "kind": "official",
+      "brandId": "gymshark",
+      "marketCountry": "US",
+      "locale": "en-US",
+      "currency": "USD",
+      "region": "US",
+      "baseUrl": "https://www.gymshark.com",
       "domain": "www.gymshark.com",
-      "region": "US",
-      "currency": "USD",
+      "allowedHosts": [
+        "www.gymshark.com"
+      ],
+      "adapter": "shopify-products-json",
+      "runtime": "server",
+      "listingUrls": [],
       "category": "apparel",
-      "platform": "shopify",
-      "verified": "confirmed"
+      "popular": false,
+      "support": {
+        "status": "unverified",
+        "checkedAt": null,
+        "environment": null,
+        "error": null,
+        "note": "Shopify 사용이 널리 알려진 곳. 실제 응답은 아직 확인되지 않음"
+      }
     },
     {
-      "brand": "Allbirds",
-      "brand_kr": "올버즈",
+      "sourceId": "allbirds-us",
+      "shopName": "Allbirds",
+      "shopName_kr": "올버즈",
+      "kind": "official",
+      "brandId": "allbirds",
+      "marketCountry": "US",
+      "locale": "en-US",
+      "currency": "USD",
+      "region": "US",
+      "baseUrl": "https://www.allbirds.com",
       "domain": "www.allbirds.com",
-      "region": "US",
-      "currency": "USD",
+      "allowedHosts": [
+        "www.allbirds.com"
+      ],
+      "adapter": "shopify-products-json",
+      "runtime": "server",
+      "listingUrls": [],
       "category": "shoes",
-      "platform": "shopify",
-      "verified": "confirmed"
+      "popular": false,
+      "support": {
+        "status": "unverified",
+        "checkedAt": null,
+        "environment": null,
+        "error": null,
+        "note": "Shopify 사용이 널리 알려진 곳. 실제 응답은 아직 확인되지 않음"
+      }
     },
     {
-      "brand": "Rothy's",
-      "brand_kr": "로시스",
+      "sourceId": "rothy-s-us",
+      "shopName": "Rothy's",
+      "shopName_kr": "로시스",
+      "kind": "official",
+      "brandId": "rothy-s",
+      "marketCountry": "US",
+      "locale": "en-US",
+      "currency": "USD",
+      "region": "US",
+      "baseUrl": "https://rothys.com",
       "domain": "rothys.com",
-      "region": "US",
-      "currency": "USD",
+      "allowedHosts": [
+        "rothys.com"
+      ],
+      "adapter": "shopify-products-json",
+      "runtime": "server",
+      "listingUrls": [],
       "category": "shoes",
-      "platform": "shopify",
-      "verified": "confirmed"
+      "popular": false,
+      "support": {
+        "status": "unverified",
+        "checkedAt": null,
+        "environment": null,
+        "error": null,
+        "note": "Shopify 사용이 널리 알려진 곳. 실제 응답은 아직 확인되지 않음"
+      }
     },
     {
-      "brand": "Rebecca Minkoff",
-      "brand_kr": "레베카민코프",
+      "sourceId": "rebecca-minkoff-us",
+      "shopName": "Rebecca Minkoff",
+      "shopName_kr": "레베카민코프",
+      "kind": "official",
+      "brandId": "rebecca-minkoff",
+      "marketCountry": "US",
+      "locale": "en-US",
+      "currency": "USD",
+      "region": "US",
+      "baseUrl": "https://www.rebeccaminkoff.com",
       "domain": "www.rebeccaminkoff.com",
-      "region": "US",
-      "currency": "USD",
+      "allowedHosts": [
+        "www.rebeccaminkoff.com"
+      ],
+      "adapter": "shopify-products-json",
+      "runtime": "server",
+      "listingUrls": [],
       "category": "bag",
-      "platform": "shopify",
-      "verified": "confirmed"
+      "popular": false,
+      "support": {
+        "status": "unverified",
+        "checkedAt": null,
+        "environment": null,
+        "error": null,
+        "note": "Shopify 사용이 널리 알려진 곳. 실제 응답은 아직 확인되지 않음"
+      }
     },
     {
-      "brand": "MVMT",
-      "brand_kr": "무브먼트",
+      "sourceId": "mvmt-us",
+      "shopName": "MVMT",
+      "shopName_kr": "무브먼트",
+      "kind": "official",
+      "brandId": "mvmt",
+      "marketCountry": "US",
+      "locale": "en-US",
+      "currency": "USD",
+      "region": "US",
+      "baseUrl": "https://www.mvmt.com",
       "domain": "www.mvmt.com",
-      "region": "US",
-      "currency": "USD",
+      "allowedHosts": [
+        "www.mvmt.com"
+      ],
+      "adapter": "shopify-products-json",
+      "runtime": "server",
+      "listingUrls": [],
       "category": "watch",
-      "platform": "shopify",
-      "verified": "confirmed"
+      "popular": false,
+      "support": {
+        "status": "unverified",
+        "checkedAt": null,
+        "environment": null,
+        "error": null,
+        "note": "Shopify 사용이 널리 알려진 곳. 실제 응답은 아직 확인되지 않음"
+      }
     },
     {
-      "brand": "Girlfriend Collective",
-      "brand_kr": "걸프렌드컬렉티브",
+      "sourceId": "girlfriend-collective-us",
+      "shopName": "Girlfriend Collective",
+      "shopName_kr": "걸프렌드컬렉티브",
+      "kind": "official",
+      "brandId": "girlfriend-collective",
+      "marketCountry": "US",
+      "locale": "en-US",
+      "currency": "USD",
+      "region": "US",
+      "baseUrl": "https://girlfriend.com",
       "domain": "girlfriend.com",
-      "region": "US",
-      "currency": "USD",
+      "allowedHosts": [
+        "girlfriend.com"
+      ],
+      "adapter": "shopify-products-json",
+      "runtime": "server",
+      "listingUrls": [],
       "category": "apparel",
-      "platform": "shopify",
-      "verified": "confirmed"
+      "popular": false,
+      "support": {
+        "status": "unverified",
+        "checkedAt": null,
+        "environment": null,
+        "error": null,
+        "note": "Shopify 사용이 널리 알려진 곳. 실제 응답은 아직 확인되지 않음"
+      }
     },
     {
-      "brand": "Outdoor Voices",
-      "brand_kr": "아웃도어보이시스",
+      "sourceId": "outdoor-voices-us",
+      "shopName": "Outdoor Voices",
+      "shopName_kr": "아웃도어보이시스",
+      "kind": "official",
+      "brandId": "outdoor-voices",
+      "marketCountry": "US",
+      "locale": "en-US",
+      "currency": "USD",
+      "region": "US",
+      "baseUrl": "https://www.outdoorvoices.com",
       "domain": "www.outdoorvoices.com",
-      "region": "US",
-      "currency": "USD",
+      "allowedHosts": [
+        "www.outdoorvoices.com"
+      ],
+      "adapter": "shopify-products-json",
+      "runtime": "server",
+      "listingUrls": [],
       "category": "apparel",
-      "platform": "shopify",
-      "verified": "confirmed"
+      "popular": false,
+      "support": {
+        "status": "unverified",
+        "checkedAt": null,
+        "environment": null,
+        "error": null,
+        "note": "Shopify 사용이 널리 알려진 곳. 실제 응답은 아직 확인되지 않음"
+      }
     },
     {
-      "brand": "Cuyana",
-      "brand_kr": "쿠야나",
+      "sourceId": "cuyana-us",
+      "shopName": "Cuyana",
+      "shopName_kr": "쿠야나",
+      "kind": "official",
+      "brandId": "cuyana",
+      "marketCountry": "US",
+      "locale": "en-US",
+      "currency": "USD",
+      "region": "US",
+      "baseUrl": "https://www.cuyana.com",
       "domain": "www.cuyana.com",
-      "region": "US",
-      "currency": "USD",
+      "allowedHosts": [
+        "www.cuyana.com"
+      ],
+      "adapter": "shopify-products-json",
+      "runtime": "server",
+      "listingUrls": [],
       "category": "bag",
-      "platform": "shopify",
-      "verified": "unconfirmed"
+      "popular": false,
+      "support": {
+        "status": "unverified",
+        "checkedAt": null,
+        "environment": null,
+        "error": null,
+        "note": "실제 응답 미확인"
+      }
     },
     {
-      "brand": "Naadam",
-      "brand_kr": "나담",
+      "sourceId": "naadam-us",
+      "shopName": "Naadam",
+      "shopName_kr": "나담",
+      "kind": "official",
+      "brandId": "naadam",
+      "marketCountry": "US",
+      "locale": "en-US",
+      "currency": "USD",
+      "region": "US",
+      "baseUrl": "https://naadam.co",
       "domain": "naadam.co",
-      "region": "US",
-      "currency": "USD",
+      "allowedHosts": [
+        "naadam.co"
+      ],
+      "adapter": "shopify-products-json",
+      "runtime": "server",
+      "listingUrls": [],
       "category": "apparel",
-      "platform": "shopify",
-      "verified": "unconfirmed"
+      "popular": false,
+      "support": {
+        "status": "unverified",
+        "checkedAt": null,
+        "environment": null,
+        "error": null,
+        "note": "실제 응답 미확인"
+      }
     },
     {
-      "brand": "M.Gemi",
-      "brand_kr": "엠제미",
+      "sourceId": "m-gemi-us",
+      "shopName": "M.Gemi",
+      "shopName_kr": "엠제미",
+      "kind": "official",
+      "brandId": "m-gemi",
+      "marketCountry": "US",
+      "locale": "en-US",
+      "currency": "USD",
+      "region": "US",
+      "baseUrl": "https://www.mgemi.com",
       "domain": "www.mgemi.com",
-      "region": "US",
-      "currency": "USD",
+      "allowedHosts": [
+        "www.mgemi.com"
+      ],
+      "adapter": "shopify-products-json",
+      "runtime": "server",
+      "listingUrls": [],
       "category": "shoes",
-      "platform": "shopify",
-      "verified": "unconfirmed"
+      "popular": false,
+      "support": {
+        "status": "unverified",
+        "checkedAt": null,
+        "environment": null,
+        "error": null,
+        "note": "실제 응답 미확인"
+      }
     },
     {
-      "brand": "Marine Layer",
-      "brand_kr": "마린레이어",
+      "sourceId": "marine-layer-us",
+      "shopName": "Marine Layer",
+      "shopName_kr": "마린레이어",
+      "kind": "official",
+      "brandId": "marine-layer",
+      "marketCountry": "US",
+      "locale": "en-US",
+      "currency": "USD",
+      "region": "US",
+      "baseUrl": "https://www.marinelayer.com",
       "domain": "www.marinelayer.com",
-      "region": "US",
-      "currency": "USD",
+      "allowedHosts": [
+        "www.marinelayer.com"
+      ],
+      "adapter": "shopify-products-json",
+      "runtime": "server",
+      "listingUrls": [],
       "category": "apparel",
-      "platform": "shopify",
-      "verified": "unconfirmed"
+      "popular": false,
+      "support": {
+        "status": "unverified",
+        "checkedAt": null,
+        "environment": null,
+        "error": null,
+        "note": "실제 응답 미확인"
+      }
     },
     {
-      "brand": "Faherty",
-      "brand_kr": "파허티",
+      "sourceId": "faherty-us",
+      "shopName": "Faherty",
+      "shopName_kr": "파허티",
+      "kind": "official",
+      "brandId": "faherty",
+      "marketCountry": "US",
+      "locale": "en-US",
+      "currency": "USD",
+      "region": "US",
+      "baseUrl": "https://fahertybrand.com",
       "domain": "fahertybrand.com",
-      "region": "US",
-      "currency": "USD",
+      "allowedHosts": [
+        "fahertybrand.com"
+      ],
+      "adapter": "shopify-products-json",
+      "runtime": "server",
+      "listingUrls": [],
       "category": "apparel",
-      "platform": "shopify",
-      "verified": "unconfirmed"
+      "popular": false,
+      "support": {
+        "status": "unverified",
+        "checkedAt": null,
+        "environment": null,
+        "error": null,
+        "note": "실제 응답 미확인"
+      }
     },
     {
-      "brand": "Kotn",
-      "brand_kr": "코튼",
+      "sourceId": "kotn-us",
+      "shopName": "Kotn",
+      "shopName_kr": "코튼",
+      "kind": "official",
+      "brandId": "kotn",
+      "marketCountry": "US",
+      "locale": "en-US",
+      "currency": "USD",
+      "region": "US",
+      "baseUrl": "https://kotn.com",
       "domain": "kotn.com",
-      "region": "US",
-      "currency": "USD",
+      "allowedHosts": [
+        "kotn.com"
+      ],
+      "adapter": "shopify-products-json",
+      "runtime": "server",
+      "listingUrls": [],
       "category": "apparel",
-      "platform": "shopify",
-      "verified": "unconfirmed"
+      "popular": false,
+      "support": {
+        "status": "unverified",
+        "checkedAt": null,
+        "environment": null,
+        "error": null,
+        "note": "실제 응답 미확인"
+      }
     },
     {
-      "brand": "Theory",
-      "brand_kr": "띠어리",
+      "sourceId": "theory-us",
+      "shopName": "Theory",
+      "shopName_kr": "띠어리",
+      "kind": "official",
+      "brandId": "theory",
+      "marketCountry": "US",
+      "locale": "en-US",
+      "currency": "USD",
+      "region": "US",
+      "baseUrl": "https://www.theory.com",
       "domain": "www.theory.com",
-      "region": "US",
-      "currency": "USD",
+      "allowedHosts": [
+        "www.theory.com"
+      ],
+      "adapter": "shopify-products-json",
+      "runtime": "server",
+      "listingUrls": [],
       "category": "apparel",
-      "platform": "shopify",
-      "verified": "blocked",
       "popular": true,
-      "blocked_error": "HTTP 410",
-      "blocked_checked_at": "2026-09-03"
+      "support": {
+        "status": "blocked",
+        "checkedAt": "2026-09-03",
+        "environment": "vercel-serverless",
+        "error": "HTTP 410",
+        "note": "실제 배포 스캔에서 실패 — 서버사이드 요청 자체가 막히는 것으로 보인다"
+      }
     },
     {
-      "brand": "Sandro",
-      "brand_kr": "산드로",
+      "sourceId": "sandro-us",
+      "shopName": "Sandro",
+      "shopName_kr": "산드로",
+      "kind": "official",
+      "brandId": "sandro",
+      "marketCountry": "US",
+      "locale": "en-US",
+      "currency": "USD",
+      "region": "US",
+      "baseUrl": "https://us.sandro-paris.com",
       "domain": "us.sandro-paris.com",
-      "region": "US",
-      "currency": "USD",
+      "allowedHosts": [
+        "us.sandro-paris.com"
+      ],
+      "adapter": "shopify-products-json",
+      "runtime": "server",
+      "listingUrls": [],
       "category": "apparel",
-      "platform": "shopify",
-      "verified": "blocked",
       "popular": true,
-      "blocked_error": "HTTP 404",
-      "blocked_checked_at": "2026-09-03"
+      "support": {
+        "status": "blocked",
+        "checkedAt": "2026-09-03",
+        "environment": "vercel-serverless",
+        "error": "HTTP 404",
+        "note": "실제 배포 스캔에서 실패 — 서버사이드 요청 자체가 막히는 것으로 보인다"
+      }
     },
     {
-      "brand": "Maje",
-      "brand_kr": "마쥬",
+      "sourceId": "maje-us",
+      "shopName": "Maje",
+      "shopName_kr": "마쥬",
+      "kind": "official",
+      "brandId": "maje",
+      "marketCountry": "US",
+      "locale": "en-US",
+      "currency": "USD",
+      "region": "US",
+      "baseUrl": "https://us.maje.com",
       "domain": "us.maje.com",
-      "region": "US",
-      "currency": "USD",
+      "allowedHosts": [
+        "us.maje.com"
+      ],
+      "adapter": "shopify-products-json",
+      "runtime": "server",
+      "listingUrls": [],
       "category": "apparel",
-      "platform": "shopify",
-      "verified": "blocked",
       "popular": true,
-      "blocked_error": "HTTP 404",
-      "blocked_checked_at": "2026-09-03"
+      "support": {
+        "status": "blocked",
+        "checkedAt": "2026-09-03",
+        "environment": "vercel-serverless",
+        "error": "HTTP 404",
+        "note": "실제 배포 스캔에서 실패 — 서버사이드 요청 자체가 막히는 것으로 보인다"
+      }
     },
     {
-      "brand": "Zadig&Voltaire",
-      "brand_kr": "쟈딕앤볼테르",
-      "domain": "www.zadig-et-voltaire.com/us",
-      "region": "US",
+      "sourceId": "zadig-voltaire-us",
+      "shopName": "Zadig&Voltaire",
+      "shopName_kr": "쟈딕앤볼테르",
+      "kind": "official",
+      "brandId": "zadig-voltaire",
+      "marketCountry": "US",
+      "locale": "en-US",
       "currency": "USD",
+      "region": "US",
+      "baseUrl": "https://www.zadig-et-voltaire.com/us",
+      "domain": "www.zadig-et-voltaire.com",
+      "allowedHosts": [
+        "www.zadig-et-voltaire.com"
+      ],
+      "adapter": "shopify-products-json",
+      "runtime": "server",
+      "listingUrls": [],
       "category": "apparel",
-      "platform": "shopify",
-      "verified": "blocked",
       "popular": true,
-      "blocked_error": "HTTP 404",
-      "blocked_checked_at": "2026-09-03"
+      "support": {
+        "status": "blocked",
+        "checkedAt": "2026-09-03",
+        "environment": "vercel-serverless",
+        "error": "HTTP 404",
+        "note": "실제 배포 스캔에서 실패 — 서버사이드 요청 자체가 막히는 것으로 보인다"
+      }
     },
     {
-      "brand": "Veja",
-      "brand_kr": "베자",
+      "sourceId": "veja-us",
+      "shopName": "Veja",
+      "shopName_kr": "베자",
+      "kind": "official",
+      "brandId": "veja",
+      "marketCountry": "US",
+      "locale": "en-US",
+      "currency": "USD",
+      "region": "US",
+      "baseUrl": "https://www.veja-store.com",
       "domain": "www.veja-store.com",
-      "region": "US",
-      "currency": "USD",
+      "allowedHosts": [
+        "www.veja-store.com"
+      ],
+      "adapter": "shopify-products-json",
+      "runtime": "server",
+      "listingUrls": [],
       "category": "shoes",
-      "platform": "shopify",
-      "verified": "unconfirmed"
+      "popular": false,
+      "support": {
+        "status": "unverified",
+        "checkedAt": null,
+        "environment": null,
+        "error": null,
+        "note": "실제 응답 미확인"
+      }
     },
     {
-      "brand": "Lacoste",
-      "brand_kr": "라코스테",
+      "sourceId": "lacoste-us",
+      "shopName": "Lacoste",
+      "shopName_kr": "라코스테",
+      "kind": "official",
+      "brandId": "lacoste",
+      "marketCountry": "US",
+      "locale": "en-US",
+      "currency": "USD",
+      "region": "US",
+      "baseUrl": "https://www.lacoste.com",
       "domain": "www.lacoste.com",
-      "region": "US",
-      "currency": "USD",
+      "allowedHosts": [
+        "www.lacoste.com"
+      ],
+      "adapter": "shopify-products-json",
+      "runtime": "server",
+      "listingUrls": [],
       "category": "apparel",
-      "platform": "shopify",
-      "verified": "blocked",
       "popular": true,
-      "blocked_error": "HTTP 403",
-      "blocked_checked_at": "2026-09-03"
+      "support": {
+        "status": "blocked",
+        "checkedAt": "2026-09-03",
+        "environment": "vercel-serverless",
+        "error": "HTTP 403",
+        "note": "실제 배포 스캔에서 실패 — 서버사이드 요청 자체가 막히는 것으로 보인다"
+      }
     },
     {
-      "brand": "Coach",
-      "brand_kr": "코치",
+      "sourceId": "coach-us",
+      "shopName": "Coach",
+      "shopName_kr": "코치",
+      "kind": "official",
+      "brandId": "coach",
+      "marketCountry": "US",
+      "locale": "en-US",
+      "currency": "USD",
+      "region": "US",
+      "baseUrl": "https://www.coach.com",
       "domain": "www.coach.com",
-      "region": "US",
-      "currency": "USD",
+      "allowedHosts": [
+        "www.coach.com"
+      ],
+      "adapter": "shopify-products-json",
+      "runtime": "server",
+      "listingUrls": [],
       "category": "bag",
-      "platform": "shopify",
-      "verified": "blocked",
       "popular": true,
-      "blocked_error": "HTTP 403",
-      "blocked_checked_at": "2026-09-03"
+      "support": {
+        "status": "blocked",
+        "checkedAt": "2026-09-03",
+        "environment": "vercel-serverless",
+        "error": "HTTP 403",
+        "note": "실제 배포 스캔에서 실패 — 서버사이드 요청 자체가 막히는 것으로 보인다"
+      }
     },
     {
-      "brand": "Coach Outlet",
-      "brand_kr": "코치 아울렛",
+      "sourceId": "coach-outlet-us",
+      "shopName": "Coach Outlet",
+      "shopName_kr": "코치 아울렛",
+      "kind": "official",
+      "brandId": "coach-outlet",
+      "marketCountry": "US",
+      "locale": "en-US",
+      "currency": "USD",
+      "region": "US",
+      "baseUrl": "https://www.coachoutlet.com",
       "domain": "www.coachoutlet.com",
-      "region": "US",
-      "currency": "USD",
+      "allowedHosts": [
+        "www.coachoutlet.com"
+      ],
+      "adapter": "shopify-products-json",
+      "runtime": "server",
+      "listingUrls": [],
       "category": "bag",
-      "platform": "shopify",
-      "verified": "blocked",
       "popular": true,
-      "blocked_error": "HTTP 403",
-      "blocked_checked_at": "2026-09-03"
+      "support": {
+        "status": "blocked",
+        "checkedAt": "2026-09-03",
+        "environment": "vercel-serverless",
+        "error": "HTTP 403",
+        "note": "실제 배포 스캔에서 실패 — 서버사이드 요청 자체가 막히는 것으로 보인다"
+      }
     },
     {
-      "brand": "New Balance",
-      "brand_kr": "뉴발란스",
+      "sourceId": "new-balance-us",
+      "shopName": "New Balance",
+      "shopName_kr": "뉴발란스",
+      "kind": "official",
+      "brandId": "new-balance",
+      "marketCountry": "US",
+      "locale": "en-US",
+      "currency": "USD",
+      "region": "US",
+      "baseUrl": "https://www.newbalance.com",
       "domain": "www.newbalance.com",
-      "region": "US",
-      "currency": "USD",
+      "allowedHosts": [
+        "www.newbalance.com"
+      ],
+      "adapter": "shopify-products-json",
+      "runtime": "server",
+      "listingUrls": [],
       "category": "shoes",
-      "platform": "shopify",
-      "verified": "blocked",
       "popular": true,
-      "blocked_error": "HTTP 403",
-      "blocked_checked_at": "2026-09-03"
+      "support": {
+        "status": "blocked",
+        "checkedAt": "2026-09-03",
+        "environment": "vercel-serverless",
+        "error": "HTTP 403",
+        "note": "실제 배포 스캔에서 실패 — 서버사이드 요청 자체가 막히는 것으로 보인다"
+      }
     },
     {
-      "brand": "Polo Ralph Lauren",
-      "brand_kr": "폴로 랄프로렌",
+      "sourceId": "polo-ralph-lauren-us",
+      "shopName": "Polo Ralph Lauren",
+      "shopName_kr": "폴로 랄프로렌",
+      "kind": "official",
+      "brandId": "polo-ralph-lauren",
+      "marketCountry": "US",
+      "locale": "en-US",
+      "currency": "USD",
+      "region": "US",
+      "baseUrl": "https://www.ralphlauren.com",
       "domain": "www.ralphlauren.com",
-      "region": "US",
-      "currency": "USD",
+      "allowedHosts": [
+        "www.ralphlauren.com"
+      ],
+      "adapter": "shopify-products-json",
+      "runtime": "server",
+      "listingUrls": [],
       "category": "apparel",
-      "platform": "shopify",
-      "verified": "blocked",
       "popular": true,
-      "blocked_error": "HTTP 410",
-      "blocked_checked_at": "2026-09-03"
+      "support": {
+        "status": "blocked",
+        "checkedAt": "2026-09-03",
+        "environment": "vercel-serverless",
+        "error": "HTTP 410",
+        "note": "실제 배포 스캔에서 실패 — 서버사이드 요청 자체가 막히는 것으로 보인다"
+      }
     },
     {
-      "brand": "COS",
-      "brand_kr": "코스",
+      "sourceId": "cos-us",
+      "shopName": "COS",
+      "shopName_kr": "코스",
+      "kind": "official",
+      "brandId": "cos",
+      "marketCountry": "US",
+      "locale": "en-US",
+      "currency": "USD",
+      "region": "US",
+      "baseUrl": "https://www.cosstores.com",
       "domain": "www.cosstores.com",
-      "region": "US",
-      "currency": "USD",
+      "allowedHosts": [
+        "www.cosstores.com"
+      ],
+      "adapter": "shopify-products-json",
+      "runtime": "server",
+      "listingUrls": [],
       "category": "apparel",
-      "platform": "shopify",
-      "verified": "blocked",
       "popular": true,
-      "blocked_error": "HTTP 403",
-      "blocked_checked_at": "2026-09-03"
+      "support": {
+        "status": "blocked",
+        "checkedAt": "2026-09-03",
+        "environment": "vercel-serverless",
+        "error": "HTTP 403",
+        "note": "실제 배포 스캔에서 실패 — 서버사이드 요청 자체가 막히는 것으로 보인다"
+      }
     },
     {
-      "brand": "Isabel Marant",
-      "brand_kr": "이자벨마랑",
+      "sourceId": "isabel-marant-us",
+      "shopName": "Isabel Marant",
+      "shopName_kr": "이자벨마랑",
+      "kind": "official",
+      "brandId": "isabel-marant",
+      "marketCountry": "US",
+      "locale": "en-US",
+      "currency": "USD",
+      "region": "US",
+      "baseUrl": "https://www.isabelmarant.com",
       "domain": "www.isabelmarant.com",
-      "region": "US",
-      "currency": "USD",
+      "allowedHosts": [
+        "www.isabelmarant.com"
+      ],
+      "adapter": "shopify-products-json",
+      "runtime": "server",
+      "listingUrls": [],
       "category": "apparel",
-      "platform": "shopify",
-      "verified": "unconfirmed",
-      "popular": true
+      "popular": true,
+      "support": {
+        "status": "unverified",
+        "checkedAt": null,
+        "environment": null,
+        "error": null,
+        "note": "실제 응답 미확인"
+      }
     },
     {
-      "brand": "Tory Burch",
-      "brand_kr": "토리버치",
+      "sourceId": "tory-burch-us",
+      "shopName": "Tory Burch",
+      "shopName_kr": "토리버치",
+      "kind": "official",
+      "brandId": "tory-burch",
+      "marketCountry": "US",
+      "locale": "en-US",
+      "currency": "USD",
+      "region": "US",
+      "baseUrl": "https://www.toryburch.com",
       "domain": "www.toryburch.com",
-      "region": "US",
-      "currency": "USD",
+      "allowedHosts": [
+        "www.toryburch.com"
+      ],
+      "adapter": "shopify-products-json",
+      "runtime": "server",
+      "listingUrls": [],
       "category": "bag",
-      "platform": "shopify",
-      "verified": "blocked",
       "popular": true,
-      "blocked_error": "HTTP 503",
-      "blocked_checked_at": "2026-09-03"
+      "support": {
+        "status": "blocked",
+        "checkedAt": "2026-09-03",
+        "environment": "vercel-serverless",
+        "error": "HTTP 503",
+        "note": "실제 배포 스캔에서 실패 — 서버사이드 요청 자체가 막히는 것으로 보인다"
+      }
     },
     {
-      "brand": "Marc Jacobs",
-      "brand_kr": "마크제이콥스",
+      "sourceId": "marc-jacobs-us",
+      "shopName": "Marc Jacobs",
+      "shopName_kr": "마크제이콥스",
+      "kind": "official",
+      "brandId": "marc-jacobs",
+      "marketCountry": "US",
+      "locale": "en-US",
+      "currency": "USD",
+      "region": "US",
+      "baseUrl": "https://www.marcjacobs.com",
       "domain": "www.marcjacobs.com",
-      "region": "US",
-      "currency": "USD",
+      "allowedHosts": [
+        "www.marcjacobs.com"
+      ],
+      "adapter": "shopify-products-json",
+      "runtime": "server",
+      "listingUrls": [],
       "category": "bag",
-      "platform": "shopify",
-      "verified": "blocked",
       "popular": true,
-      "blocked_error": "HTTP 404",
-      "blocked_checked_at": "2026-09-03"
+      "support": {
+        "status": "blocked",
+        "checkedAt": "2026-09-03",
+        "environment": "vercel-serverless",
+        "error": "HTTP 404",
+        "note": "실제 배포 스캔에서 실패 — 서버사이드 요청 자체가 막히는 것으로 보인다"
+      }
     },
     {
-      "brand": "Kate Spade",
-      "brand_kr": "케이트스페이드",
+      "sourceId": "kate-spade-us",
+      "shopName": "Kate Spade",
+      "shopName_kr": "케이트스페이드",
+      "kind": "official",
+      "brandId": "kate-spade",
+      "marketCountry": "US",
+      "locale": "en-US",
+      "currency": "USD",
+      "region": "US",
+      "baseUrl": "https://www.katespade.com",
       "domain": "www.katespade.com",
-      "region": "US",
-      "currency": "USD",
+      "allowedHosts": [
+        "www.katespade.com"
+      ],
+      "adapter": "shopify-products-json",
+      "runtime": "server",
+      "listingUrls": [],
       "category": "bag",
-      "platform": "shopify",
-      "verified": "blocked",
       "popular": true,
-      "blocked_error": "HTTP 403",
-      "blocked_checked_at": "2026-09-03"
+      "support": {
+        "status": "blocked",
+        "checkedAt": "2026-09-03",
+        "environment": "vercel-serverless",
+        "error": "HTTP 403",
+        "note": "실제 배포 스캔에서 실패 — 서버사이드 요청 자체가 막히는 것으로 보인다"
+      }
     },
     {
-      "brand": "Kate Spade Outlet",
-      "brand_kr": "케이트스페이드 아울렛",
+      "sourceId": "kate-spade-outlet-us",
+      "shopName": "Kate Spade Outlet",
+      "shopName_kr": "케이트스페이드 아울렛",
+      "kind": "official",
+      "brandId": "kate-spade-outlet",
+      "marketCountry": "US",
+      "locale": "en-US",
+      "currency": "USD",
+      "region": "US",
+      "baseUrl": "https://www.katespadeoutlet.com",
       "domain": "www.katespadeoutlet.com",
-      "region": "US",
-      "currency": "USD",
+      "allowedHosts": [
+        "www.katespadeoutlet.com"
+      ],
+      "adapter": "shopify-products-json",
+      "runtime": "server",
+      "listingUrls": [],
       "category": "bag",
-      "platform": "shopify",
-      "verified": "blocked",
       "popular": true,
-      "blocked_error": "HTTP 403",
-      "blocked_checked_at": "2026-09-03"
+      "support": {
+        "status": "blocked",
+        "checkedAt": "2026-09-03",
+        "environment": "vercel-serverless",
+        "error": "HTTP 403",
+        "note": "실제 배포 스캔에서 실패 — 서버사이드 요청 자체가 막히는 것으로 보인다"
+      }
     },
     {
-      "brand": "Michael Kors",
-      "brand_kr": "마이클코어스",
+      "sourceId": "michael-kors-us",
+      "shopName": "Michael Kors",
+      "shopName_kr": "마이클코어스",
+      "kind": "official",
+      "brandId": "michael-kors",
+      "marketCountry": "US",
+      "locale": "en-US",
+      "currency": "USD",
+      "region": "US",
+      "baseUrl": "https://www.michaelkors.com",
       "domain": "www.michaelkors.com",
-      "region": "US",
-      "currency": "USD",
+      "allowedHosts": [
+        "www.michaelkors.com"
+      ],
+      "adapter": "shopify-products-json",
+      "runtime": "server",
+      "listingUrls": [],
       "category": "bag",
-      "platform": "shopify",
-      "verified": "blocked",
       "popular": true,
-      "blocked_error": "HTTP 403",
-      "blocked_checked_at": "2026-09-03"
+      "support": {
+        "status": "blocked",
+        "checkedAt": "2026-09-03",
+        "environment": "vercel-serverless",
+        "error": "HTTP 403",
+        "note": "실제 배포 스캔에서 실패 — 서버사이드 요청 자체가 막히는 것으로 보인다"
+      }
     },
     {
-      "brand": "Longchamp",
-      "brand_kr": "롱샴",
+      "sourceId": "longchamp-us",
+      "shopName": "Longchamp",
+      "shopName_kr": "롱샴",
+      "kind": "official",
+      "brandId": "longchamp",
+      "marketCountry": "US",
+      "locale": "en-US",
+      "currency": "USD",
+      "region": "US",
+      "baseUrl": "https://us.longchamp.com",
       "domain": "us.longchamp.com",
-      "region": "US",
-      "currency": "USD",
+      "allowedHosts": [
+        "us.longchamp.com"
+      ],
+      "adapter": "shopify-products-json",
+      "runtime": "server",
+      "listingUrls": [],
       "category": "bag",
-      "platform": "shopify",
-      "verified": "blocked",
       "popular": true,
-      "blocked_error": "Unexpected token '<'",
-      "blocked_checked_at": "2026-09-03"
+      "support": {
+        "status": "blocked",
+        "checkedAt": "2026-09-03",
+        "environment": "vercel-serverless",
+        "error": "Unexpected token '<'",
+        "note": "실제 배포 스캔에서 실패 — 서버사이드 요청 자체가 막히는 것으로 보인다"
+      }
     },
     {
-      "brand": "Ferragamo",
-      "brand_kr": "페라가모",
-      "domain": "www.ferragamo.com/us",
-      "region": "US",
+      "sourceId": "ferragamo-us",
+      "shopName": "Ferragamo",
+      "shopName_kr": "페라가모",
+      "kind": "official",
+      "brandId": "ferragamo",
+      "marketCountry": "US",
+      "locale": "en-US",
       "currency": "USD",
+      "region": "US",
+      "baseUrl": "https://www.ferragamo.com/us",
+      "domain": "www.ferragamo.com",
+      "allowedHosts": [
+        "www.ferragamo.com"
+      ],
+      "adapter": "shopify-products-json",
+      "runtime": "server",
+      "listingUrls": [],
       "category": "bag",
-      "platform": "shopify",
-      "verified": "blocked",
       "popular": true,
-      "blocked_error": "HTTP 403",
-      "blocked_checked_at": "2026-09-05"
+      "support": {
+        "status": "blocked",
+        "checkedAt": "2026-09-05",
+        "environment": "vercel-serverless",
+        "error": "HTTP 403",
+        "note": "실제 배포 스캔에서 실패 — 서버사이드 요청 자체가 막히는 것으로 보인다"
+      }
     },
     {
-      "brand": "Golden Goose",
-      "brand_kr": "골든구스",
+      "sourceId": "golden-goose-us",
+      "shopName": "Golden Goose",
+      "shopName_kr": "골든구스",
+      "kind": "official",
+      "brandId": "golden-goose",
+      "marketCountry": "US",
+      "locale": "en-US",
+      "currency": "USD",
+      "region": "US",
+      "baseUrl": "https://www.goldengoosedeluxebrand.com",
       "domain": "www.goldengoosedeluxebrand.com",
-      "region": "US",
-      "currency": "USD",
+      "allowedHosts": [
+        "www.goldengoosedeluxebrand.com"
+      ],
+      "adapter": "shopify-products-json",
+      "runtime": "server",
+      "listingUrls": [],
       "category": "shoes",
-      "platform": "shopify",
-      "verified": "blocked",
       "popular": true,
-      "blocked_error": "HTTP 410",
-      "blocked_checked_at": "2026-09-05"
+      "support": {
+        "status": "blocked",
+        "checkedAt": "2026-09-05",
+        "environment": "vercel-serverless",
+        "error": "HTTP 410",
+        "note": "실제 배포 스캔에서 실패 — 서버사이드 요청 자체가 막히는 것으로 보인다"
+      }
     },
     {
-      "brand": "Ugg",
-      "brand_kr": "어그",
+      "sourceId": "ugg-us",
+      "shopName": "Ugg",
+      "shopName_kr": "어그",
+      "kind": "official",
+      "brandId": "ugg",
+      "marketCountry": "US",
+      "locale": "en-US",
+      "currency": "USD",
+      "region": "US",
+      "baseUrl": "https://www.ugg.com",
       "domain": "www.ugg.com",
-      "region": "US",
-      "currency": "USD",
+      "allowedHosts": [
+        "www.ugg.com"
+      ],
+      "adapter": "shopify-products-json",
+      "runtime": "server",
+      "listingUrls": [],
       "category": "shoes",
-      "platform": "shopify",
-      "verified": "blocked",
       "popular": true,
-      "blocked_error": "HTTP 410",
-      "blocked_checked_at": "2026-09-05"
+      "support": {
+        "status": "blocked",
+        "checkedAt": "2026-09-05",
+        "environment": "vercel-serverless",
+        "error": "HTTP 410",
+        "note": "실제 배포 스캔에서 실패 — 서버사이드 요청 자체가 막히는 것으로 보인다"
+      }
     },
     {
-      "brand": "On Running",
-      "brand_kr": "온러닝",
+      "sourceId": "on-running-us",
+      "shopName": "On Running",
+      "shopName_kr": "온러닝",
+      "kind": "official",
+      "brandId": "on-running",
+      "marketCountry": "US",
+      "locale": "en-US",
+      "currency": "USD",
+      "region": "US",
+      "baseUrl": "https://www.on-running.com",
       "domain": "www.on-running.com",
-      "region": "US",
-      "currency": "USD",
+      "allowedHosts": [
+        "www.on-running.com"
+      ],
+      "adapter": "shopify-products-json",
+      "runtime": "server",
+      "listingUrls": [],
       "category": "shoes",
-      "platform": "shopify",
-      "verified": "blocked",
       "popular": true,
-      "blocked_error": "Unexpected token '<'",
-      "blocked_checked_at": "2026-09-05"
+      "support": {
+        "status": "blocked",
+        "checkedAt": "2026-09-05",
+        "environment": "vercel-serverless",
+        "error": "Unexpected token '<'",
+        "note": "실제 배포 스캔에서 실패 — 서버사이드 요청 자체가 막히는 것으로 보인다"
+      }
     },
     {
-      "brand": "Salomon",
-      "brand_kr": "살로몬",
+      "sourceId": "salomon-us",
+      "shopName": "Salomon",
+      "shopName_kr": "살로몬",
+      "kind": "official",
+      "brandId": "salomon",
+      "marketCountry": "US",
+      "locale": "en-US",
+      "currency": "USD",
+      "region": "US",
+      "baseUrl": "https://www.salomon.com",
       "domain": "www.salomon.com",
-      "region": "US",
-      "currency": "USD",
+      "allowedHosts": [
+        "www.salomon.com"
+      ],
+      "adapter": "shopify-products-json",
+      "runtime": "server",
+      "listingUrls": [],
       "category": "shoes",
-      "platform": "shopify",
-      "verified": "blocked",
       "popular": true,
-      "blocked_error": "HTTP 404",
-      "blocked_checked_at": "2026-09-05"
+      "support": {
+        "status": "blocked",
+        "checkedAt": "2026-09-05",
+        "environment": "vercel-serverless",
+        "error": "HTTP 404",
+        "note": "실제 배포 스캔에서 실패 — 서버사이드 요청 자체가 막히는 것으로 보인다"
+      }
     },
     {
-      "brand": "Arc’teryx",
-      "brand_kr": "아크테릭스",
+      "sourceId": "arc-teryx-us",
+      "shopName": "Arc’teryx",
+      "shopName_kr": "아크테릭스",
+      "kind": "official",
+      "brandId": "arc-teryx",
+      "marketCountry": "US",
+      "locale": "en-US",
+      "currency": "USD",
+      "region": "US",
+      "baseUrl": "https://arcteryx.com",
       "domain": "arcteryx.com",
-      "region": "US",
-      "currency": "USD",
+      "allowedHosts": [
+        "arcteryx.com"
+      ],
+      "adapter": "shopify-products-json",
+      "runtime": "server",
+      "listingUrls": [],
       "category": "apparel",
-      "platform": "shopify",
-      "verified": "blocked",
       "popular": true,
-      "blocked_error": "HTTP 404",
-      "blocked_checked_at": "2026-09-05"
+      "support": {
+        "status": "blocked",
+        "checkedAt": "2026-09-05",
+        "environment": "vercel-serverless",
+        "error": "HTTP 404",
+        "note": "실제 배포 스캔에서 실패 — 서버사이드 요청 자체가 막히는 것으로 보인다"
+      }
     },
     {
-      "brand": "Patagonia",
-      "brand_kr": "파타고니아",
+      "sourceId": "patagonia-us",
+      "shopName": "Patagonia",
+      "shopName_kr": "파타고니아",
+      "kind": "official",
+      "brandId": "patagonia",
+      "marketCountry": "US",
+      "locale": "en-US",
+      "currency": "USD",
+      "region": "US",
+      "baseUrl": "https://www.patagonia.com",
       "domain": "www.patagonia.com",
-      "region": "US",
-      "currency": "USD",
+      "allowedHosts": [
+        "www.patagonia.com"
+      ],
+      "adapter": "shopify-products-json",
+      "runtime": "server",
+      "listingUrls": [],
       "category": "apparel",
-      "platform": "shopify",
-      "verified": "blocked",
       "popular": true,
-      "blocked_error": "HTTP 404",
-      "blocked_checked_at": "2026-09-05"
+      "support": {
+        "status": "blocked",
+        "checkedAt": "2026-09-05",
+        "environment": "vercel-serverless",
+        "error": "HTTP 404",
+        "note": "실제 배포 스캔에서 실패 — 서버사이드 요청 자체가 막히는 것으로 보인다"
+      }
     },
     {
-      "brand": "Lululemon",
-      "brand_kr": "룰루레몬",
+      "sourceId": "lululemon-us",
+      "shopName": "Lululemon",
+      "shopName_kr": "룰루레몬",
+      "kind": "official",
+      "brandId": "lululemon",
+      "marketCountry": "US",
+      "locale": "en-US",
+      "currency": "USD",
+      "region": "US",
+      "baseUrl": "https://shop.lululemon.com",
       "domain": "shop.lululemon.com",
-      "region": "US",
-      "currency": "USD",
+      "allowedHosts": [
+        "shop.lululemon.com"
+      ],
+      "adapter": "shopify-products-json",
+      "runtime": "server",
+      "listingUrls": [],
       "category": "apparel",
-      "platform": "shopify",
-      "verified": "blocked",
       "popular": true,
-      "blocked_error": "HTTP 403",
-      "blocked_checked_at": "2026-09-05"
+      "support": {
+        "status": "blocked",
+        "checkedAt": "2026-09-05",
+        "environment": "vercel-serverless",
+        "error": "HTTP 403",
+        "note": "실제 배포 스캔에서 실패 — 서버사이드 요청 자체가 막히는 것으로 보인다"
+      }
     },
     {
-      "brand": "Barbour",
-      "brand_kr": "바버",
+      "sourceId": "barbour-us",
+      "shopName": "Barbour",
+      "shopName_kr": "바버",
+      "kind": "official",
+      "brandId": "barbour",
+      "marketCountry": "US",
+      "locale": "en-US",
+      "currency": "USD",
+      "region": "US",
+      "baseUrl": "https://www.barbour.com",
       "domain": "www.barbour.com",
-      "region": "US",
-      "currency": "USD",
+      "allowedHosts": [
+        "www.barbour.com"
+      ],
+      "adapter": "shopify-products-json",
+      "runtime": "server",
+      "listingUrls": [],
       "category": "apparel",
-      "platform": "shopify",
-      "verified": "blocked",
       "popular": true,
-      "blocked_error": "HTTP 404",
-      "blocked_checked_at": "2026-09-05"
+      "support": {
+        "status": "blocked",
+        "checkedAt": "2026-09-05",
+        "environment": "vercel-serverless",
+        "error": "HTTP 404",
+        "note": "실제 배포 스캔에서 실패 — 서버사이드 요청 자체가 막히는 것으로 보인다"
+      }
     },
     {
-      "brand": "Carhartt WIP",
-      "brand_kr": "칼하트",
+      "sourceId": "carhartt-wip-us",
+      "shopName": "Carhartt WIP",
+      "shopName_kr": "칼하트",
+      "kind": "official",
+      "brandId": "carhartt-wip",
+      "marketCountry": "US",
+      "locale": "en-US",
+      "currency": "USD",
+      "region": "US",
+      "baseUrl": "https://www.carhartt-wip.com",
       "domain": "www.carhartt-wip.com",
-      "region": "US",
-      "currency": "USD",
+      "allowedHosts": [
+        "www.carhartt-wip.com"
+      ],
+      "adapter": "shopify-products-json",
+      "runtime": "server",
+      "listingUrls": [],
       "category": "apparel",
-      "platform": "shopify",
-      "verified": "blocked",
       "popular": true,
-      "blocked_error": "HTTP 404",
-      "blocked_checked_at": "2026-09-05"
+      "support": {
+        "status": "blocked",
+        "checkedAt": "2026-09-05",
+        "environment": "vercel-serverless",
+        "error": "HTTP 404",
+        "note": "실제 배포 스캔에서 실패 — 서버사이드 요청 자체가 막히는 것으로 보인다"
+      }
     },
     {
-      "brand": "Reiss",
-      "brand_kr": "리스",
+      "sourceId": "reiss-us",
+      "shopName": "Reiss",
+      "shopName_kr": "리스",
+      "kind": "official",
+      "brandId": "reiss",
+      "marketCountry": "US",
+      "locale": "en-US",
+      "currency": "USD",
+      "region": "US",
+      "baseUrl": "https://www.reiss.com",
       "domain": "www.reiss.com",
-      "region": "US",
-      "currency": "USD",
+      "allowedHosts": [
+        "www.reiss.com"
+      ],
+      "adapter": "shopify-products-json",
+      "runtime": "server",
+      "listingUrls": [],
       "category": "apparel",
-      "platform": "shopify",
-      "verified": "unconfirmed"
+      "popular": false,
+      "support": {
+        "status": "unverified",
+        "checkedAt": null,
+        "environment": null,
+        "error": null,
+        "note": "실제 응답 미확인"
+      }
     },
     {
-      "brand": "Vince",
-      "brand_kr": "빈스",
+      "sourceId": "vince-us",
+      "shopName": "Vince",
+      "shopName_kr": "빈스",
+      "kind": "official",
+      "brandId": "vince",
+      "marketCountry": "US",
+      "locale": "en-US",
+      "currency": "USD",
+      "region": "US",
+      "baseUrl": "https://www.vince.com",
       "domain": "www.vince.com",
-      "region": "US",
-      "currency": "USD",
+      "allowedHosts": [
+        "www.vince.com"
+      ],
+      "adapter": "shopify-products-json",
+      "runtime": "server",
+      "listingUrls": [],
       "category": "apparel",
-      "platform": "shopify",
-      "verified": "unconfirmed"
+      "popular": false,
+      "support": {
+        "status": "unverified",
+        "checkedAt": null,
+        "environment": null,
+        "error": null,
+        "note": "실제 응답 미확인"
+      }
     },
     {
-      "brand": "Max Mara",
-      "brand_kr": "막스마라",
+      "sourceId": "max-mara-us",
+      "shopName": "Max Mara",
+      "shopName_kr": "막스마라",
+      "kind": "official",
+      "brandId": "max-mara",
+      "marketCountry": "US",
+      "locale": "en-US",
+      "currency": "USD",
+      "region": "US",
+      "baseUrl": "https://www.maxmara.com",
       "domain": "www.maxmara.com",
-      "region": "US",
-      "currency": "USD",
+      "allowedHosts": [
+        "www.maxmara.com"
+      ],
+      "adapter": "shopify-products-json",
+      "runtime": "server",
+      "listingUrls": [],
       "category": "apparel",
-      "platform": "shopify",
-      "verified": "blocked",
       "popular": true,
-      "blocked_error": "HTTP 403",
-      "blocked_checked_at": "2026-09-05"
+      "support": {
+        "status": "blocked",
+        "checkedAt": "2026-09-05",
+        "environment": "vercel-serverless",
+        "error": "HTTP 403",
+        "note": "실제 배포 스캔에서 실패 — 서버사이드 요청 자체가 막히는 것으로 보인다"
+      }
     },
     {
-      "brand": "Free People",
-      "brand_kr": "프리피플",
+      "sourceId": "free-people-us",
+      "shopName": "Free People",
+      "shopName_kr": "프리피플",
+      "kind": "official",
+      "brandId": "free-people",
+      "marketCountry": "US",
+      "locale": "en-US",
+      "currency": "USD",
+      "region": "US",
+      "baseUrl": "https://www.freepeople.com",
       "domain": "www.freepeople.com",
-      "region": "US",
-      "currency": "USD",
+      "allowedHosts": [
+        "www.freepeople.com"
+      ],
+      "adapter": "shopify-products-json",
+      "runtime": "server",
+      "listingUrls": [],
       "category": "apparel",
-      "platform": "shopify",
-      "verified": "unconfirmed"
+      "popular": false,
+      "support": {
+        "status": "unverified",
+        "checkedAt": null,
+        "environment": null,
+        "error": null,
+        "note": "실제 응답 미확인"
+      }
     },
     {
-      "brand": "Aritzia",
-      "brand_kr": "아리치아",
+      "sourceId": "aritzia-us",
+      "shopName": "Aritzia",
+      "shopName_kr": "아리치아",
+      "kind": "official",
+      "brandId": "aritzia",
+      "marketCountry": "US",
+      "locale": "en-US",
+      "currency": "USD",
+      "region": "US",
+      "baseUrl": "https://www.aritzia.com",
       "domain": "www.aritzia.com",
-      "region": "US",
-      "currency": "USD",
+      "allowedHosts": [
+        "www.aritzia.com"
+      ],
+      "adapter": "shopify-products-json",
+      "runtime": "server",
+      "listingUrls": [],
       "category": "apparel",
-      "platform": "shopify",
-      "verified": "unconfirmed"
+      "popular": false,
+      "support": {
+        "status": "unverified",
+        "checkedAt": null,
+        "environment": null,
+        "error": null,
+        "note": "실제 응답 미확인"
+      }
     },
     {
-      "brand": "Anine Bing",
-      "brand_kr": "아닌빙",
+      "sourceId": "anine-bing-us",
+      "shopName": "Anine Bing",
+      "shopName_kr": "아닌빙",
+      "kind": "official",
+      "brandId": "anine-bing",
+      "marketCountry": "US",
+      "locale": "en-US",
+      "currency": "USD",
+      "region": "US",
+      "baseUrl": "https://www.aninebing.com",
       "domain": "www.aninebing.com",
-      "region": "US",
-      "currency": "USD",
+      "allowedHosts": [
+        "www.aninebing.com"
+      ],
+      "adapter": "shopify-products-json",
+      "runtime": "server",
+      "listingUrls": [],
       "category": "apparel",
-      "platform": "shopify",
-      "verified": "confirmed"
+      "popular": false,
+      "support": {
+        "status": "unverified",
+        "checkedAt": null,
+        "environment": null,
+        "error": null,
+        "note": "Shopify 사용이 널리 알려진 곳. 실제 응답은 아직 확인되지 않음"
+      }
     },
     {
-      "brand": "Stussy",
-      "brand_kr": "스투시",
+      "sourceId": "stussy-us",
+      "shopName": "Stussy",
+      "shopName_kr": "스투시",
+      "kind": "official",
+      "brandId": "stussy",
+      "marketCountry": "US",
+      "locale": "en-US",
+      "currency": "USD",
+      "region": "US",
+      "baseUrl": "https://www.stussy.com",
       "domain": "www.stussy.com",
-      "region": "US",
-      "currency": "USD",
+      "allowedHosts": [
+        "www.stussy.com"
+      ],
+      "adapter": "shopify-products-json",
+      "runtime": "server",
+      "listingUrls": [],
       "category": "apparel",
-      "platform": "shopify",
-      "verified": "confirmed",
-      "popular": true
+      "popular": true,
+      "support": {
+        "status": "unverified",
+        "checkedAt": null,
+        "environment": null,
+        "error": null,
+        "note": "Shopify 사용이 널리 알려진 곳. 실제 응답은 아직 확인되지 않음"
+      }
     },
     {
-      "brand": "Staud",
-      "brand_kr": "스토드",
+      "sourceId": "staud-us",
+      "shopName": "Staud",
+      "shopName_kr": "스토드",
+      "kind": "official",
+      "brandId": "staud",
+      "marketCountry": "US",
+      "locale": "en-US",
+      "currency": "USD",
+      "region": "US",
+      "baseUrl": "https://www.staud.clothing",
       "domain": "www.staud.clothing",
-      "region": "US",
-      "currency": "USD",
+      "allowedHosts": [
+        "www.staud.clothing"
+      ],
+      "adapter": "shopify-products-json",
+      "runtime": "server",
+      "listingUrls": [],
       "category": "apparel",
-      "platform": "shopify",
-      "verified": "unconfirmed"
+      "popular": false,
+      "support": {
+        "status": "unverified",
+        "checkedAt": null,
+        "environment": null,
+        "error": null,
+        "note": "실제 응답 미확인"
+      }
     },
     {
-      "brand": "Self-Portrait",
-      "brand_kr": "셀프포트레이트",
+      "sourceId": "self-portrait-us",
+      "shopName": "Self-Portrait",
+      "shopName_kr": "셀프포트레이트",
+      "kind": "official",
+      "brandId": "self-portrait",
+      "marketCountry": "US",
+      "locale": "en-US",
+      "currency": "USD",
+      "region": "US",
+      "baseUrl": "https://www.self-portrait-studio.com",
       "domain": "www.self-portrait-studio.com",
-      "region": "US",
-      "currency": "USD",
+      "allowedHosts": [
+        "www.self-portrait-studio.com"
+      ],
+      "adapter": "shopify-products-json",
+      "runtime": "server",
+      "listingUrls": [],
       "category": "apparel",
-      "platform": "shopify",
-      "verified": "blocked",
       "popular": true,
-      "blocked_error": "HTTP 404",
-      "blocked_checked_at": "2026-09-05"
+      "support": {
+        "status": "blocked",
+        "checkedAt": "2026-09-05",
+        "environment": "vercel-serverless",
+        "error": "HTTP 404",
+        "note": "실제 배포 스캔에서 실패 — 서버사이드 요청 자체가 막히는 것으로 보인다"
+      }
     },
     {
-      "brand": "Sezane",
-      "brand_kr": "세잔느",
+      "sourceId": "sezane-fr",
+      "shopName": "Sezane",
+      "shopName_kr": "세잔느",
+      "kind": "official",
+      "brandId": "sezane",
+      "marketCountry": "FR",
+      "locale": "fr-FR",
+      "currency": "EUR",
+      "region": "EU",
+      "baseUrl": "https://www.sezane.com",
       "domain": "www.sezane.com",
-      "region": "EU",
-      "currency": "EUR",
+      "allowedHosts": [
+        "www.sezane.com"
+      ],
+      "adapter": "shopify-products-json",
+      "runtime": "server",
+      "listingUrls": [],
       "category": "apparel",
-      "platform": "shopify",
-      "verified": "confirmed"
+      "popular": false,
+      "support": {
+        "status": "unverified",
+        "checkedAt": null,
+        "environment": null,
+        "error": null,
+        "note": "Shopify 사용이 널리 알려진 곳. 실제 응답은 아직 확인되지 않음"
+      }
     },
     {
-      "brand": "Rouje",
-      "brand_kr": "루쥬",
+      "sourceId": "rouje-fr",
+      "shopName": "Rouje",
+      "shopName_kr": "루쥬",
+      "kind": "official",
+      "brandId": "rouje",
+      "marketCountry": "FR",
+      "locale": "fr-FR",
+      "currency": "EUR",
+      "region": "EU",
+      "baseUrl": "https://www.rouje.com",
       "domain": "www.rouje.com",
-      "region": "EU",
-      "currency": "EUR",
+      "allowedHosts": [
+        "www.rouje.com"
+      ],
+      "adapter": "shopify-products-json",
+      "runtime": "server",
+      "listingUrls": [],
       "category": "apparel",
-      "platform": "shopify",
-      "verified": "confirmed"
+      "popular": false,
+      "support": {
+        "status": "unverified",
+        "checkedAt": null,
+        "environment": null,
+        "error": null,
+        "note": "Shopify 사용이 널리 알려진 곳. 실제 응답은 아직 확인되지 않음"
+      }
     },
     {
-      "brand": "Sandro EU",
-      "brand_kr": "산드로",
+      "sourceId": "sandro-eu-fr",
+      "shopName": "Sandro EU",
+      "shopName_kr": "산드로",
+      "kind": "official",
+      "brandId": "sandro",
+      "marketCountry": "FR",
+      "locale": "fr-FR",
+      "currency": "EUR",
+      "region": "EU",
+      "baseUrl": "https://www.sandro-paris.com",
       "domain": "www.sandro-paris.com",
-      "region": "EU",
-      "currency": "EUR",
+      "allowedHosts": [
+        "www.sandro-paris.com"
+      ],
+      "adapter": "shopify-products-json",
+      "runtime": "server",
+      "listingUrls": [],
       "category": "apparel",
-      "platform": "shopify",
-      "verified": "blocked",
       "popular": true,
-      "blocked_error": "Unexpected token '<'",
-      "blocked_checked_at": "2026-09-05"
+      "support": {
+        "status": "blocked",
+        "checkedAt": "2026-09-05",
+        "environment": "vercel-serverless",
+        "error": "Unexpected token '<'",
+        "note": "실제 배포 스캔에서 실패 — 서버사이드 요청 자체가 막히는 것으로 보인다"
+      }
     },
     {
-      "brand": "Maje EU",
-      "brand_kr": "마쥬",
+      "sourceId": "maje-eu-fr",
+      "shopName": "Maje EU",
+      "shopName_kr": "마쥬",
+      "kind": "official",
+      "brandId": "maje",
+      "marketCountry": "FR",
+      "locale": "fr-FR",
+      "currency": "EUR",
+      "region": "EU",
+      "baseUrl": "https://www.maje.com",
       "domain": "www.maje.com",
-      "region": "EU",
-      "currency": "EUR",
+      "allowedHosts": [
+        "www.maje.com"
+      ],
+      "adapter": "shopify-products-json",
+      "runtime": "server",
+      "listingUrls": [],
       "category": "apparel",
-      "platform": "shopify",
-      "verified": "blocked",
       "popular": true,
-      "blocked_error": "Unexpected token '<'",
-      "blocked_checked_at": "2026-09-05"
+      "support": {
+        "status": "blocked",
+        "checkedAt": "2026-09-05",
+        "environment": "vercel-serverless",
+        "error": "Unexpected token '<'",
+        "note": "실제 배포 스캔에서 실패 — 서버사이드 요청 자체가 막히는 것으로 보인다"
+      }
     },
     {
-      "brand": "Zadig&Voltaire EU",
-      "brand_kr": "쟈딕앤볼테르",
-      "domain": "www.zadig-et-voltaire.com/fr",
-      "region": "EU",
+      "sourceId": "zadig-voltaire-eu-fr",
+      "shopName": "Zadig&Voltaire EU",
+      "shopName_kr": "쟈딕앤볼테르",
+      "kind": "official",
+      "brandId": "zadig-voltaire",
+      "marketCountry": "FR",
+      "locale": "fr-FR",
       "currency": "EUR",
+      "region": "EU",
+      "baseUrl": "https://www.zadig-et-voltaire.com/fr",
+      "domain": "www.zadig-et-voltaire.com",
+      "allowedHosts": [
+        "www.zadig-et-voltaire.com"
+      ],
+      "adapter": "shopify-products-json",
+      "runtime": "server",
+      "listingUrls": [],
       "category": "apparel",
-      "platform": "shopify",
-      "verified": "blocked",
       "popular": true,
-      "blocked_error": "HTTP 404",
-      "blocked_checked_at": "2026-09-05"
+      "support": {
+        "status": "blocked",
+        "checkedAt": "2026-09-05",
+        "environment": "vercel-serverless",
+        "error": "HTTP 404",
+        "note": "실제 배포 스캔에서 실패 — 서버사이드 요청 자체가 막히는 것으로 보인다"
+      }
     },
     {
-      "brand": "Ganni EU",
-      "brand_kr": "가니",
+      "sourceId": "ganni-eu",
+      "shopName": "Ganni EU",
+      "shopName_kr": "가니",
+      "kind": "official",
+      "brandId": "ganni",
+      "marketCountry": null,
+      "locale": null,
+      "currency": "EUR",
+      "region": "EU",
+      "baseUrl": "https://ganni.com",
       "domain": "ganni.com",
-      "region": "EU",
-      "currency": "EUR",
+      "allowedHosts": [
+        "ganni.com"
+      ],
+      "adapter": "shopify-products-json",
+      "runtime": "server",
+      "listingUrls": [],
       "category": "apparel",
-      "platform": "shopify",
-      "verified": "blocked",
       "popular": true,
-      "blocked_error": "This operation was aborted",
-      "blocked_checked_at": "2026-09-05"
+      "support": {
+        "status": "blocked",
+        "checkedAt": "2026-09-05",
+        "environment": "vercel-serverless",
+        "error": "This operation was aborted",
+        "note": "실제 배포 스캔에서 실패 — 서버사이드 요청 자체가 막히는 것으로 보인다"
+      }
     },
     {
-      "brand": "Bombas",
-      "brand_kr": "봄바스",
+      "sourceId": "bombas-us",
+      "shopName": "Bombas",
+      "shopName_kr": "봄바스",
+      "kind": "official",
+      "brandId": "bombas",
+      "marketCountry": "US",
+      "locale": "en-US",
+      "currency": "USD",
+      "region": "US",
+      "baseUrl": "https://www.bombas.com",
       "domain": "www.bombas.com",
-      "region": "US",
-      "currency": "USD",
+      "allowedHosts": [
+        "www.bombas.com"
+      ],
+      "adapter": "shopify-products-json",
+      "runtime": "server",
+      "listingUrls": [],
       "category": "accessory",
-      "platform": "shopify",
-      "verified": "confirmed"
+      "popular": false,
+      "support": {
+        "status": "unverified",
+        "checkedAt": null,
+        "environment": null,
+        "error": null,
+        "note": "Shopify 사용이 널리 알려진 곳. 실제 응답은 아직 확인되지 않음"
+      }
     },
     {
-      "brand": "MeUndies",
-      "brand_kr": "미언디스",
+      "sourceId": "meundies-us",
+      "shopName": "MeUndies",
+      "shopName_kr": "미언디스",
+      "kind": "official",
+      "brandId": "meundies",
+      "marketCountry": "US",
+      "locale": "en-US",
+      "currency": "USD",
+      "region": "US",
+      "baseUrl": "https://www.meundies.com",
       "domain": "www.meundies.com",
-      "region": "US",
-      "currency": "USD",
+      "allowedHosts": [
+        "www.meundies.com"
+      ],
+      "adapter": "shopify-products-json",
+      "runtime": "server",
+      "listingUrls": [],
       "category": "apparel",
-      "platform": "shopify",
-      "verified": "confirmed"
+      "popular": false,
+      "support": {
+        "status": "unverified",
+        "checkedAt": null,
+        "environment": null,
+        "error": null,
+        "note": "Shopify 사용이 널리 알려진 곳. 실제 응답은 아직 확인되지 않음"
+      }
     },
     {
-      "brand": "Stance",
-      "brand_kr": "스탠스",
+      "sourceId": "stance-us",
+      "shopName": "Stance",
+      "shopName_kr": "스탠스",
+      "kind": "official",
+      "brandId": "stance",
+      "marketCountry": "US",
+      "locale": "en-US",
+      "currency": "USD",
+      "region": "US",
+      "baseUrl": "https://www.stance.com",
       "domain": "www.stance.com",
-      "region": "US",
-      "currency": "USD",
+      "allowedHosts": [
+        "www.stance.com"
+      ],
+      "adapter": "shopify-products-json",
+      "runtime": "server",
+      "listingUrls": [],
       "category": "accessory",
-      "platform": "shopify",
-      "verified": "unconfirmed"
+      "popular": false,
+      "support": {
+        "status": "unverified",
+        "checkedAt": null,
+        "environment": null,
+        "error": null,
+        "note": "실제 응답 미확인"
+      }
     },
     {
-      "brand": "Cotopaxi",
-      "brand_kr": "코토팍시",
+      "sourceId": "cotopaxi-us",
+      "shopName": "Cotopaxi",
+      "shopName_kr": "코토팍시",
+      "kind": "official",
+      "brandId": "cotopaxi",
+      "marketCountry": "US",
+      "locale": "en-US",
+      "currency": "USD",
+      "region": "US",
+      "baseUrl": "https://www.cotopaxi.com",
       "domain": "www.cotopaxi.com",
-      "region": "US",
-      "currency": "USD",
+      "allowedHosts": [
+        "www.cotopaxi.com"
+      ],
+      "adapter": "shopify-products-json",
+      "runtime": "server",
+      "listingUrls": [],
       "category": "bag",
-      "platform": "shopify",
-      "verified": "unconfirmed"
+      "popular": false,
+      "support": {
+        "status": "unverified",
+        "checkedAt": null,
+        "environment": null,
+        "error": null,
+        "note": "실제 응답 미확인"
+      }
     },
     {
-      "brand": "Vuori",
-      "brand_kr": "부오리",
+      "sourceId": "vuori-us",
+      "shopName": "Vuori",
+      "shopName_kr": "부오리",
+      "kind": "official",
+      "brandId": "vuori",
+      "marketCountry": "US",
+      "locale": "en-US",
+      "currency": "USD",
+      "region": "US",
+      "baseUrl": "https://www.vuoriclothing.com",
       "domain": "www.vuoriclothing.com",
-      "region": "US",
-      "currency": "USD",
+      "allowedHosts": [
+        "www.vuoriclothing.com"
+      ],
+      "adapter": "shopify-products-json",
+      "runtime": "server",
+      "listingUrls": [],
       "category": "apparel",
-      "platform": "shopify",
-      "verified": "unconfirmed"
+      "popular": false,
+      "support": {
+        "status": "unverified",
+        "checkedAt": null,
+        "environment": null,
+        "error": null,
+        "note": "실제 응답 미확인"
+      }
     },
     {
-      "brand": "Chubbies",
-      "brand_kr": "처비스",
+      "sourceId": "chubbies-us",
+      "shopName": "Chubbies",
+      "shopName_kr": "처비스",
+      "kind": "official",
+      "brandId": "chubbies",
+      "marketCountry": "US",
+      "locale": "en-US",
+      "currency": "USD",
+      "region": "US",
+      "baseUrl": "https://www.chubbiesshorts.com",
       "domain": "www.chubbiesshorts.com",
-      "region": "US",
-      "currency": "USD",
+      "allowedHosts": [
+        "www.chubbiesshorts.com"
+      ],
+      "adapter": "shopify-products-json",
+      "runtime": "server",
+      "listingUrls": [],
       "category": "apparel",
-      "platform": "shopify",
-      "verified": "unconfirmed"
+      "popular": false,
+      "support": {
+        "status": "unverified",
+        "checkedAt": null,
+        "environment": null,
+        "error": null,
+        "note": "실제 응답 미확인"
+      }
     },
     {
-      "brand": "Untuckit",
-      "brand_kr": "언턱잇",
+      "sourceId": "untuckit-us",
+      "shopName": "Untuckit",
+      "shopName_kr": "언턱잇",
+      "kind": "official",
+      "brandId": "untuckit",
+      "marketCountry": "US",
+      "locale": "en-US",
+      "currency": "USD",
+      "region": "US",
+      "baseUrl": "https://www.untuckit.com",
       "domain": "www.untuckit.com",
-      "region": "US",
-      "currency": "USD",
+      "allowedHosts": [
+        "www.untuckit.com"
+      ],
+      "adapter": "shopify-products-json",
+      "runtime": "server",
+      "listingUrls": [],
       "category": "apparel",
-      "platform": "shopify",
-      "verified": "unconfirmed"
+      "popular": false,
+      "support": {
+        "status": "unverified",
+        "checkedAt": null,
+        "environment": null,
+        "error": null,
+        "note": "실제 응답 미확인"
+      }
     },
     {
-      "brand": "ThirdLove",
-      "brand_kr": "써드러브",
+      "sourceId": "thirdlove-us",
+      "shopName": "ThirdLove",
+      "shopName_kr": "써드러브",
+      "kind": "official",
+      "brandId": "thirdlove",
+      "marketCountry": "US",
+      "locale": "en-US",
+      "currency": "USD",
+      "region": "US",
+      "baseUrl": "https://www.thirdlove.com",
       "domain": "www.thirdlove.com",
-      "region": "US",
-      "currency": "USD",
+      "allowedHosts": [
+        "www.thirdlove.com"
+      ],
+      "adapter": "shopify-products-json",
+      "runtime": "server",
+      "listingUrls": [],
       "category": "apparel",
-      "platform": "shopify",
-      "verified": "unconfirmed"
+      "popular": false,
+      "support": {
+        "status": "unverified",
+        "checkedAt": null,
+        "environment": null,
+        "error": null,
+        "note": "실제 응답 미확인"
+      }
     },
     {
-      "brand": "Taylor Stitch",
-      "brand_kr": "테일러스티치",
+      "sourceId": "taylor-stitch-us",
+      "shopName": "Taylor Stitch",
+      "shopName_kr": "테일러스티치",
+      "kind": "official",
+      "brandId": "taylor-stitch",
+      "marketCountry": "US",
+      "locale": "en-US",
+      "currency": "USD",
+      "region": "US",
+      "baseUrl": "https://www.taylorstitch.com",
       "domain": "www.taylorstitch.com",
-      "region": "US",
-      "currency": "USD",
+      "allowedHosts": [
+        "www.taylorstitch.com"
+      ],
+      "adapter": "shopify-products-json",
+      "runtime": "server",
+      "listingUrls": [],
       "category": "apparel",
-      "platform": "shopify",
-      "verified": "unconfirmed"
+      "popular": false,
+      "support": {
+        "status": "unverified",
+        "checkedAt": null,
+        "environment": null,
+        "error": null,
+        "note": "실제 응답 미확인"
+      }
     },
     {
-      "brand": "Rowing Blazers",
-      "brand_kr": "로잉블레이저스",
+      "sourceId": "rowing-blazers-us",
+      "shopName": "Rowing Blazers",
+      "shopName_kr": "로잉블레이저스",
+      "kind": "official",
+      "brandId": "rowing-blazers",
+      "marketCountry": "US",
+      "locale": "en-US",
+      "currency": "USD",
+      "region": "US",
+      "baseUrl": "https://www.rowingblazers.com",
       "domain": "www.rowingblazers.com",
-      "region": "US",
-      "currency": "USD",
+      "allowedHosts": [
+        "www.rowingblazers.com"
+      ],
+      "adapter": "shopify-products-json",
+      "runtime": "server",
+      "listingUrls": [],
       "category": "apparel",
-      "platform": "shopify",
-      "verified": "unconfirmed"
+      "popular": false,
+      "support": {
+        "status": "unverified",
+        "checkedAt": null,
+        "environment": null,
+        "error": null,
+        "note": "실제 응답 미확인"
+      }
     },
     {
-      "brand": "Birdies",
-      "brand_kr": "버디스",
+      "sourceId": "birdies-us",
+      "shopName": "Birdies",
+      "shopName_kr": "버디스",
+      "kind": "official",
+      "brandId": "birdies",
+      "marketCountry": "US",
+      "locale": "en-US",
+      "currency": "USD",
+      "region": "US",
+      "baseUrl": "https://www.shopbirdies.com",
       "domain": "www.shopbirdies.com",
-      "region": "US",
-      "currency": "USD",
+      "allowedHosts": [
+        "www.shopbirdies.com"
+      ],
+      "adapter": "shopify-products-json",
+      "runtime": "server",
+      "listingUrls": [],
       "category": "shoes",
-      "platform": "shopify",
-      "verified": "unconfirmed"
-    }
-  ],
-  "_multi_brand_readme": "아래 sites_multi_brand는 여러 브랜드를 한 사이트에서 파는 편집숍이다. 'brand' 필드는 구입처(사이트) 이름일 뿐, 실제 상품 브랜드는 api/scan.js가 Shopify 응답의 vendor 필드에서 자동으로 읽는다 — 그래서 이 목록에 없는 브랜드가 갑자기 세일해도 브랜드를 미리 등록할 필요 없이 잡힌다. category도 상품 제목/product_type을 보고 자동 보정한다. Carbon38/Concepts/Bodega/Goop은 2026-09-05에 추가한 후보로, 이 세션도 외부망이 막혀 있어 실제 접속 검증을 못했다 — 배포 후 스캔해서 errors에 뭐가 실패하는지 확인할 것.",
-  "sites_multi_brand": [
+      "popular": false,
+      "support": {
+        "status": "unverified",
+        "checkedAt": null,
+        "environment": null,
+        "error": null,
+        "note": "실제 응답 미확인"
+      }
+    },
     {
-      "brand": "Bandier",
-      "brand_kr": "밴디어",
+      "sourceId": "bandier-us",
+      "shopName": "Bandier",
+      "shopName_kr": "밴디어",
+      "kind": "multi_brand",
+      "brandId": null,
+      "marketCountry": "US",
+      "locale": "en-US",
+      "currency": "USD",
+      "region": "US",
+      "baseUrl": "https://www.bandier.com",
       "domain": "www.bandier.com",
-      "region": "US",
-      "currency": "USD",
+      "allowedHosts": [
+        "www.bandier.com"
+      ],
+      "adapter": "shopify-products-json",
+      "runtime": "server",
+      "listingUrls": [],
       "category": "apparel",
-      "platform": "shopify",
-      "verified": "confirmed"
+      "popular": false,
+      "support": {
+        "status": "unverified",
+        "checkedAt": null,
+        "environment": null,
+        "error": null,
+        "note": "Shopify 사용이 널리 알려진 곳. 실제 응답은 아직 확인되지 않음"
+      }
     },
     {
-      "brand": "Verishop",
-      "brand_kr": "베리샵",
+      "sourceId": "verishop-us",
+      "shopName": "Verishop",
+      "shopName_kr": "베리샵",
+      "kind": "multi_brand",
+      "brandId": null,
+      "marketCountry": "US",
+      "locale": "en-US",
+      "currency": "USD",
+      "region": "US",
+      "baseUrl": "https://www.verishop.com",
       "domain": "www.verishop.com",
-      "region": "US",
-      "currency": "USD",
+      "allowedHosts": [
+        "www.verishop.com"
+      ],
+      "adapter": "shopify-products-json",
+      "runtime": "server",
+      "listingUrls": [],
       "category": "apparel",
-      "platform": "shopify",
-      "verified": "unconfirmed"
+      "popular": false,
+      "support": {
+        "status": "unverified",
+        "checkedAt": null,
+        "environment": null,
+        "error": null,
+        "note": "실제 응답 미확인"
+      }
     },
     {
-      "brand": "The Webster",
-      "brand_kr": "더웹스터",
+      "sourceId": "the-webster-us",
+      "shopName": "The Webster",
+      "shopName_kr": "더웹스터",
+      "kind": "multi_brand",
+      "brandId": null,
+      "marketCountry": "US",
+      "locale": "en-US",
+      "currency": "USD",
+      "region": "US",
+      "baseUrl": "https://www.thewebster.us",
       "domain": "www.thewebster.us",
-      "region": "US",
-      "currency": "USD",
+      "allowedHosts": [
+        "www.thewebster.us"
+      ],
+      "adapter": "shopify-products-json",
+      "runtime": "server",
+      "listingUrls": [],
       "category": "apparel",
-      "platform": "shopify",
-      "verified": "unconfirmed"
+      "popular": false,
+      "support": {
+        "status": "unverified",
+        "checkedAt": null,
+        "environment": null,
+        "error": null,
+        "note": "실제 응답 미확인"
+      }
     },
     {
-      "brand": "Kirna Zabete",
-      "brand_kr": "키르나자베트",
+      "sourceId": "kirna-zabete-us",
+      "shopName": "Kirna Zabete",
+      "shopName_kr": "키르나자베트",
+      "kind": "multi_brand",
+      "brandId": null,
+      "marketCountry": "US",
+      "locale": "en-US",
+      "currency": "USD",
+      "region": "US",
+      "baseUrl": "https://www.kirnazabete.com",
       "domain": "www.kirnazabete.com",
-      "region": "US",
-      "currency": "USD",
+      "allowedHosts": [
+        "www.kirnazabete.com"
+      ],
+      "adapter": "shopify-products-json",
+      "runtime": "server",
+      "listingUrls": [],
       "category": "apparel",
-      "platform": "shopify",
-      "verified": "unconfirmed"
+      "popular": false,
+      "support": {
+        "status": "unverified",
+        "checkedAt": null,
+        "environment": null,
+        "error": null,
+        "note": "실제 응답 미확인"
+      }
     },
     {
-      "brand": "Carbon38",
-      "brand_kr": "카본38",
+      "sourceId": "carbon38-us",
+      "shopName": "Carbon38",
+      "shopName_kr": "카본38",
+      "kind": "multi_brand",
+      "brandId": null,
+      "marketCountry": "US",
+      "locale": "en-US",
+      "currency": "USD",
+      "region": "US",
+      "baseUrl": "https://carbon38.com",
       "domain": "carbon38.com",
-      "region": "US",
-      "currency": "USD",
+      "allowedHosts": [
+        "carbon38.com"
+      ],
+      "adapter": "shopify-products-json",
+      "runtime": "server",
+      "listingUrls": [],
       "category": "apparel",
-      "platform": "shopify",
-      "verified": "unconfirmed"
+      "popular": false,
+      "support": {
+        "status": "unverified",
+        "checkedAt": null,
+        "environment": null,
+        "error": null,
+        "note": "실제 응답 미확인"
+      }
     },
     {
-      "brand": "Concepts",
-      "brand_kr": "콘셉츠",
+      "sourceId": "concepts-us",
+      "shopName": "Concepts",
+      "shopName_kr": "콘셉츠",
+      "kind": "multi_brand",
+      "brandId": null,
+      "marketCountry": "US",
+      "locale": "en-US",
+      "currency": "USD",
+      "region": "US",
+      "baseUrl": "https://cncpts.com",
       "domain": "cncpts.com",
-      "region": "US",
-      "currency": "USD",
+      "allowedHosts": [
+        "cncpts.com"
+      ],
+      "adapter": "shopify-products-json",
+      "runtime": "server",
+      "listingUrls": [],
       "category": "shoes",
-      "platform": "shopify",
-      "verified": "unconfirmed"
+      "popular": false,
+      "support": {
+        "status": "unverified",
+        "checkedAt": null,
+        "environment": null,
+        "error": null,
+        "note": "실제 응답 미확인"
+      }
     },
     {
-      "brand": "Bodega",
-      "brand_kr": "보데가",
+      "sourceId": "bodega-us",
+      "shopName": "Bodega",
+      "shopName_kr": "보데가",
+      "kind": "multi_brand",
+      "brandId": null,
+      "marketCountry": "US",
+      "locale": "en-US",
+      "currency": "USD",
+      "region": "US",
+      "baseUrl": "https://bdgastore.com",
       "domain": "bdgastore.com",
-      "region": "US",
-      "currency": "USD",
+      "allowedHosts": [
+        "bdgastore.com"
+      ],
+      "adapter": "shopify-products-json",
+      "runtime": "server",
+      "listingUrls": [],
       "category": "shoes",
-      "platform": "shopify",
-      "verified": "unconfirmed"
+      "popular": false,
+      "support": {
+        "status": "unverified",
+        "checkedAt": null,
+        "environment": null,
+        "error": null,
+        "note": "실제 응답 미확인"
+      }
     },
     {
-      "brand": "Goop",
-      "brand_kr": "굽",
-      "domain": "shop.goop.com",
-      "region": "US",
+      "sourceId": "goop-us",
+      "shopName": "Goop",
+      "shopName_kr": "굽",
+      "kind": "multi_brand",
+      "brandId": null,
+      "marketCountry": "US",
+      "locale": "en-US",
       "currency": "USD",
+      "region": "US",
+      "baseUrl": "https://shop.goop.com",
+      "domain": "shop.goop.com",
+      "allowedHosts": [
+        "shop.goop.com"
+      ],
+      "adapter": "shopify-products-json",
+      "runtime": "server",
+      "listingUrls": [],
       "category": "apparel",
-      "platform": "shopify",
-      "verified": "unconfirmed"
+      "popular": false,
+      "support": {
+        "status": "unverified",
+        "checkedAt": null,
+        "environment": null,
+        "error": null,
+        "note": "실제 응답 미확인"
+      }
+    },
+    {
+      "sourceId": "rei-us",
+      "shopName": "REI",
+      "shopName_kr": "REI",
+      "kind": "multi_brand",
+      "brandId": null,
+      "marketCountry": "US",
+      "locale": "en-US",
+      "currency": "USD",
+      "region": "US",
+      "baseUrl": "https://www.rei.com",
+      "domain": "www.rei.com",
+      "allowedHosts": [
+        "www.rei.com"
+      ],
+      "adapter": "rei-us",
+      "runtime": "pc",
+      "listingUrls": [
+        "https://www.rei.com/c/clothing",
+        "https://www.rei.com/rei-garage"
+      ],
+      "productIdPattern": "^/product/(\\\\d+)/",
+      "productLinkPattern": "^/product/\\\\d+/",
+      "category": "apparel",
+      "popular": false,
+      "support": {
+        "status": "unverified",
+        "checkedAt": null,
+        "environment": null,
+        "error": null,
+        "note": "필수 검증 대상. robots.txt가 /search 등 일부 경로를 제한하므로 허용된 카테고리·사이트맵만 사용한다"
+      },
+      "sitemapUrl": "https://www.rei.com/sitemap.xml",
+      "readySelector": "a[href*=\"/product/\"]"
+    },
+    {
+      "sourceId": "backcountry-us",
+      "shopName": "Backcountry",
+      "shopName_kr": "Backcountry",
+      "kind": "multi_brand",
+      "brandId": null,
+      "marketCountry": "US",
+      "locale": "en-US",
+      "currency": "USD",
+      "region": "US",
+      "baseUrl": "https://www.backcountry.com",
+      "domain": "www.backcountry.com",
+      "allowedHosts": [
+        "www.backcountry.com"
+      ],
+      "adapter": "jsonld-browser",
+      "runtime": "pc",
+      "listingUrls": [
+        "https://www.backcountry.com"
+      ],
+      "productIdPattern": null,
+      "productLinkPattern": null,
+      "category": "apparel",
+      "popular": false,
+      "support": {
+        "status": "unverified",
+        "checkedAt": null,
+        "environment": null,
+        "error": null,
+        "note": "PC 브라우저 수집 대상. 실제 수집 결과 미확인"
+      }
+    },
+    {
+      "sourceId": "sierra-us",
+      "shopName": "Sierra",
+      "shopName_kr": "Sierra",
+      "kind": "multi_brand",
+      "brandId": null,
+      "marketCountry": "US",
+      "locale": "en-US",
+      "currency": "USD",
+      "region": "US",
+      "baseUrl": "https://www.sierra.com",
+      "domain": "www.sierra.com",
+      "allowedHosts": [
+        "www.sierra.com"
+      ],
+      "adapter": "jsonld-browser",
+      "runtime": "pc",
+      "listingUrls": [
+        "https://www.sierra.com"
+      ],
+      "productIdPattern": null,
+      "productLinkPattern": null,
+      "category": "apparel",
+      "popular": false,
+      "support": {
+        "status": "unverified",
+        "checkedAt": null,
+        "environment": null,
+        "error": null,
+        "note": "PC 브라우저 수집 대상. 실제 수집 결과 미확인"
+      }
+    },
+    {
+      "sourceId": "6pm-us",
+      "shopName": "6pm",
+      "shopName_kr": "6pm",
+      "kind": "multi_brand",
+      "brandId": null,
+      "marketCountry": "US",
+      "locale": "en-US",
+      "currency": "USD",
+      "region": "US",
+      "baseUrl": "https://www.6pm.com",
+      "domain": "www.6pm.com",
+      "allowedHosts": [
+        "www.6pm.com"
+      ],
+      "adapter": "jsonld-browser",
+      "runtime": "pc",
+      "listingUrls": [
+        "https://www.6pm.com"
+      ],
+      "productIdPattern": null,
+      "productLinkPattern": null,
+      "category": "shoes",
+      "popular": false,
+      "support": {
+        "status": "unverified",
+        "checkedAt": null,
+        "environment": null,
+        "error": null,
+        "note": "PC 브라우저 수집 대상. 실제 수집 결과 미확인"
+      }
+    },
+    {
+      "sourceId": "j-crew-us",
+      "shopName": "J.Crew",
+      "shopName_kr": "J.Crew",
+      "kind": "multi_brand",
+      "brandId": null,
+      "marketCountry": "US",
+      "locale": "en-US",
+      "currency": "USD",
+      "region": "US",
+      "baseUrl": "https://www.jcrew.com",
+      "domain": "www.jcrew.com",
+      "allowedHosts": [
+        "www.jcrew.com"
+      ],
+      "adapter": "jsonld-browser",
+      "runtime": "pc",
+      "listingUrls": [
+        "https://www.jcrew.com"
+      ],
+      "productIdPattern": null,
+      "productLinkPattern": null,
+      "category": "apparel",
+      "popular": false,
+      "support": {
+        "status": "unverified",
+        "checkedAt": null,
+        "environment": null,
+        "error": null,
+        "note": "PC 브라우저 수집 대상. 실제 수집 결과 미확인"
+      }
+    },
+    {
+      "sourceId": "shopbop-us",
+      "shopName": "Shopbop",
+      "shopName_kr": "Shopbop",
+      "kind": "multi_brand",
+      "brandId": null,
+      "marketCountry": "US",
+      "locale": "en-US",
+      "currency": "USD",
+      "region": "US",
+      "baseUrl": "https://www.shopbop.com",
+      "domain": "www.shopbop.com",
+      "allowedHosts": [
+        "www.shopbop.com"
+      ],
+      "adapter": "jsonld-browser",
+      "runtime": "pc",
+      "listingUrls": [
+        "https://www.shopbop.com"
+      ],
+      "productIdPattern": null,
+      "productLinkPattern": null,
+      "category": "apparel",
+      "popular": false,
+      "support": {
+        "status": "unverified",
+        "checkedAt": null,
+        "environment": null,
+        "error": null,
+        "note": "PC 브라우저 수집 대상. 실제 수집 결과 미확인"
+      }
+    },
+    {
+      "sourceId": "revolve-us",
+      "shopName": "Revolve",
+      "shopName_kr": "Revolve",
+      "kind": "multi_brand",
+      "brandId": null,
+      "marketCountry": "US",
+      "locale": "en-US",
+      "currency": "USD",
+      "region": "US",
+      "baseUrl": "https://www.revolve.com",
+      "domain": "www.revolve.com",
+      "allowedHosts": [
+        "www.revolve.com"
+      ],
+      "adapter": "jsonld-browser",
+      "runtime": "pc",
+      "listingUrls": [
+        "https://www.revolve.com"
+      ],
+      "productIdPattern": null,
+      "productLinkPattern": null,
+      "category": "apparel",
+      "popular": false,
+      "support": {
+        "status": "unverified",
+        "checkedAt": null,
+        "environment": null,
+        "error": null,
+        "note": "PC 브라우저 수집 대상. 실제 수집 결과 미확인"
+      }
+    },
+    {
+      "sourceId": "the-outnet-us",
+      "shopName": "The Outnet",
+      "shopName_kr": "The Outnet",
+      "kind": "multi_brand",
+      "brandId": null,
+      "marketCountry": "US",
+      "locale": "en-US",
+      "currency": "USD",
+      "region": "US",
+      "baseUrl": "https://www.theoutnet.com",
+      "domain": "www.theoutnet.com",
+      "allowedHosts": [
+        "www.theoutnet.com"
+      ],
+      "adapter": "jsonld-browser",
+      "runtime": "pc",
+      "listingUrls": [
+        "https://www.theoutnet.com"
+      ],
+      "productIdPattern": null,
+      "productLinkPattern": null,
+      "category": "apparel",
+      "popular": false,
+      "support": {
+        "status": "unverified",
+        "checkedAt": null,
+        "environment": null,
+        "error": null,
+        "note": "PC 브라우저 수집 대상. 실제 수집 결과 미확인"
+      }
+    },
+    {
+      "sourceId": "mr-porter-us",
+      "shopName": "Mr Porter",
+      "shopName_kr": "Mr Porter",
+      "kind": "multi_brand",
+      "brandId": null,
+      "marketCountry": "US",
+      "locale": "en-US",
+      "currency": "USD",
+      "region": "US",
+      "baseUrl": "https://www.mrporter.com",
+      "domain": "www.mrporter.com",
+      "allowedHosts": [
+        "www.mrporter.com"
+      ],
+      "adapter": "jsonld-browser",
+      "runtime": "pc",
+      "listingUrls": [
+        "https://www.mrporter.com"
+      ],
+      "productIdPattern": null,
+      "productLinkPattern": null,
+      "category": "apparel",
+      "popular": false,
+      "support": {
+        "status": "unverified",
+        "checkedAt": null,
+        "environment": null,
+        "error": null,
+        "note": "PC 브라우저 수집 대상. 실제 수집 결과 미확인"
+      }
+    },
+    {
+      "sourceId": "net-a-porter-us",
+      "shopName": "Net-a-Porter",
+      "shopName_kr": "Net-a-Porter",
+      "kind": "multi_brand",
+      "brandId": null,
+      "marketCountry": "US",
+      "locale": "en-US",
+      "currency": "USD",
+      "region": "US",
+      "baseUrl": "https://www.net-a-porter.com",
+      "domain": "www.net-a-porter.com",
+      "allowedHosts": [
+        "www.net-a-porter.com"
+      ],
+      "adapter": "jsonld-browser",
+      "runtime": "pc",
+      "listingUrls": [
+        "https://www.net-a-porter.com"
+      ],
+      "productIdPattern": null,
+      "productLinkPattern": null,
+      "category": "apparel",
+      "popular": false,
+      "support": {
+        "status": "unverified",
+        "checkedAt": null,
+        "environment": null,
+        "error": null,
+        "note": "PC 브라우저 수집 대상. 실제 수집 결과 미확인"
+      }
+    },
+    {
+      "sourceId": "mytheresa-de",
+      "shopName": "Mytheresa",
+      "shopName_kr": "Mytheresa",
+      "kind": "multi_brand",
+      "brandId": null,
+      "marketCountry": "DE",
+      "locale": null,
+      "currency": "EUR",
+      "region": "EU",
+      "baseUrl": "https://www.mytheresa.com",
+      "domain": "www.mytheresa.com",
+      "allowedHosts": [
+        "www.mytheresa.com"
+      ],
+      "adapter": "jsonld-browser",
+      "runtime": "pc",
+      "listingUrls": [
+        "https://www.mytheresa.com"
+      ],
+      "productIdPattern": null,
+      "productLinkPattern": null,
+      "category": "apparel",
+      "popular": false,
+      "support": {
+        "status": "unverified",
+        "checkedAt": null,
+        "environment": null,
+        "error": null,
+        "note": "PC 브라우저 수집 대상. 실제 수집 결과 미확인"
+      }
+    },
+    {
+      "sourceId": "united-arrows-jp",
+      "shopName": "United Arrows",
+      "shopName_kr": "United Arrows",
+      "kind": "multi_brand",
+      "brandId": null,
+      "marketCountry": "JP",
+      "locale": "ja-JP",
+      "currency": "JPY",
+      "region": "JP",
+      "baseUrl": "https://store.united-arrows.co.jp",
+      "domain": "store.united-arrows.co.jp",
+      "allowedHosts": [
+        "store.united-arrows.co.jp"
+      ],
+      "adapter": "jsonld-browser",
+      "runtime": "pc",
+      "listingUrls": [
+        "https://store.united-arrows.co.jp"
+      ],
+      "productIdPattern": null,
+      "productLinkPattern": null,
+      "category": "apparel",
+      "popular": false,
+      "support": {
+        "status": "unverified",
+        "checkedAt": null,
+        "environment": null,
+        "error": null,
+        "note": "PC 브라우저 수집 대상. 실제 수집 결과 미확인"
+      }
+    },
+    {
+      "sourceId": "magaseek-jp",
+      "shopName": "Magaseek",
+      "shopName_kr": "Magaseek",
+      "kind": "multi_brand",
+      "brandId": null,
+      "marketCountry": "JP",
+      "locale": "ja-JP",
+      "currency": "JPY",
+      "region": "JP",
+      "baseUrl": "https://www.magaseek.com",
+      "domain": "www.magaseek.com",
+      "allowedHosts": [
+        "www.magaseek.com"
+      ],
+      "adapter": "jsonld-browser",
+      "runtime": "pc",
+      "listingUrls": [
+        "https://www.magaseek.com"
+      ],
+      "productIdPattern": null,
+      "productLinkPattern": null,
+      "category": "apparel",
+      "popular": false,
+      "support": {
+        "status": "unverified",
+        "checkedAt": null,
+        "environment": null,
+        "error": null,
+        "note": "PC 브라우저 수집 대상. 실제 수집 결과 미확인"
+      }
+    },
+    {
+      "sourceId": "beams-jp",
+      "shopName": "BEAMS",
+      "shopName_kr": "빔스",
+      "kind": "multi_brand",
+      "brandId": null,
+      "marketCountry": "JP",
+      "locale": "ja-JP",
+      "currency": "JPY",
+      "region": "JP",
+      "baseUrl": "https://www.beams.co.jp",
+      "domain": "www.beams.co.jp",
+      "allowedHosts": [
+        "www.beams.co.jp"
+      ],
+      "adapter": "jsonld-browser",
+      "runtime": "pc",
+      "listingUrls": [
+        "https://www.beams.co.jp/item/beams/"
+      ],
+      "productIdPattern": null,
+      "productLinkPattern": null,
+      "category": "apparel",
+      "popular": false,
+      "support": {
+        "status": "unverified",
+        "checkedAt": null,
+        "environment": null,
+        "error": null,
+        "note": "일본 1차 검증 후보 — 엔화 숫자·일문 사이즈 표기 확인 필요"
+      }
+    },
+    {
+      "sourceId": "end-gb",
+      "shopName": "END. (GB)",
+      "shopName_kr": "엔드 영국",
+      "kind": "multi_brand",
+      "brandId": null,
+      "marketCountry": "GB",
+      "locale": "en-GB",
+      "currency": "GBP",
+      "region": null,
+      "baseUrl": "https://www.endclothing.com",
+      "domain": "www.endclothing.com",
+      "allowedHosts": [
+        "www.endclothing.com"
+      ],
+      "adapter": "jsonld-browser",
+      "runtime": "pc",
+      "listingUrls": [
+        "https://www.endclothing.com/gb/sale"
+      ],
+      "productIdPattern": null,
+      "productLinkPattern": null,
+      "category": "apparel",
+      "popular": false,
+      "support": {
+        "status": "unverified",
+        "checkedAt": null,
+        "environment": null,
+        "error": null,
+        "note": "영국 1차 검증 후보. GBP는 원가 프로필이 없어 계산 미완료로 표시된다. 안티봇 가능성 있음 — 실제 수집 전까지 supported 아님"
+      }
+    },
+    {
+      "sourceId": "bergfreunde-de",
+      "shopName": "Bergfreunde",
+      "shopName_kr": "베르크프로인데",
+      "kind": "multi_brand",
+      "brandId": null,
+      "marketCountry": "DE",
+      "locale": "de-DE",
+      "currency": "EUR",
+      "region": "EU",
+      "baseUrl": "https://www.bergfreunde.de",
+      "domain": "www.bergfreunde.de",
+      "allowedHosts": [
+        "www.bergfreunde.de"
+      ],
+      "adapter": "jsonld-browser",
+      "runtime": "pc",
+      "listingUrls": [
+        "https://www.bergfreunde.de/bekleidung/"
+      ],
+      "productIdPattern": null,
+      "productLinkPattern": null,
+      "category": "apparel",
+      "popular": false,
+      "support": {
+        "status": "unverified",
+        "checkedAt": null,
+        "environment": null,
+        "error": null,
+        "note": "독일 1차 검증 후보 — 소수점 표기(1.299,00) 확인 필요"
+      }
+    },
+    {
+      "sourceId": "citadium-fr",
+      "shopName": "Citadium",
+      "shopName_kr": "시타디움",
+      "kind": "multi_brand",
+      "brandId": null,
+      "marketCountry": "FR",
+      "locale": "fr-FR",
+      "currency": "EUR",
+      "region": "EU",
+      "baseUrl": "https://www.citadium.com",
+      "domain": "www.citadium.com",
+      "allowedHosts": [
+        "www.citadium.com"
+      ],
+      "adapter": "jsonld-browser",
+      "runtime": "pc",
+      "listingUrls": [
+        "https://www.citadium.com/fr/fr/soldes"
+      ],
+      "productIdPattern": null,
+      "productLinkPattern": null,
+      "category": "apparel",
+      "popular": false,
+      "support": {
+        "status": "unverified",
+        "checkedAt": null,
+        "environment": null,
+        "error": null,
+        "note": "프랑스 1차 검증 후보 — 동적 렌더링 여부 확인 필요"
+      }
+    },
+    {
+      "sourceId": "luisaviaroma-it",
+      "shopName": "LuisaViaRoma (IT)",
+      "shopName_kr": "루이자비아로마",
+      "kind": "multi_brand",
+      "brandId": null,
+      "marketCountry": "IT",
+      "locale": "it-IT",
+      "currency": "EUR",
+      "region": "EU",
+      "baseUrl": "https://www.luisaviaroma.com",
+      "domain": "www.luisaviaroma.com",
+      "allowedHosts": [
+        "www.luisaviaroma.com"
+      ],
+      "adapter": "jsonld-browser",
+      "runtime": "pc",
+      "listingUrls": [
+        "https://www.luisaviaroma.com/en-it/shop/women"
+      ],
+      "productIdPattern": null,
+      "productLinkPattern": null,
+      "category": "apparel",
+      "popular": false,
+      "support": {
+        "status": "unverified",
+        "checkedAt": null,
+        "environment": null,
+        "error": null,
+        "note": "이탈리아 1차 검증 후보 — 시장 선택 리디렉션 후 표시 통화 확인 필요"
+      }
+    },
+    {
+      "sourceId": "tradeinn-dressinn-es",
+      "shopName": "Tradeinn Dressinn",
+      "shopName_kr": "트레이드인 드레스인",
+      "kind": "multi_brand",
+      "brandId": null,
+      "marketCountry": "ES",
+      "locale": "es-ES",
+      "currency": "EUR",
+      "region": "EU",
+      "baseUrl": "https://www.tradeinn.com",
+      "domain": "www.tradeinn.com",
+      "allowedHosts": [
+        "www.tradeinn.com"
+      ],
+      "adapter": "jsonld-browser",
+      "runtime": "pc",
+      "listingUrls": [
+        "https://www.tradeinn.com/dressinn/en"
+      ],
+      "productIdPattern": null,
+      "productLinkPattern": null,
+      "category": "apparel",
+      "popular": false,
+      "support": {
+        "status": "unverified",
+        "checkedAt": null,
+        "environment": null,
+        "error": null,
+        "note": "스페인 1차 검증 후보"
+      }
+    },
+    {
+      "sourceId": "zalando-nl",
+      "shopName": "Zalando NL",
+      "shopName_kr": "잘란도 네덜란드",
+      "kind": "multi_brand",
+      "brandId": null,
+      "marketCountry": "NL",
+      "locale": "nl-NL",
+      "currency": "EUR",
+      "region": "EU",
+      "baseUrl": "https://www.zalando.nl",
+      "domain": "www.zalando.nl",
+      "allowedHosts": [
+        "www.zalando.nl"
+      ],
+      "adapter": "jsonld-browser",
+      "runtime": "pc",
+      "listingUrls": [
+        "https://www.zalando.nl/dameskleding-sale/"
+      ],
+      "productIdPattern": null,
+      "productLinkPattern": null,
+      "category": "apparel",
+      "popular": false,
+      "support": {
+        "status": "unverified",
+        "checkedAt": null,
+        "environment": null,
+        "error": null,
+        "note": "네덜란드 1차 검증 후보 — 접근 제한 여부 별도 검증"
+      }
     }
-  ],
-  "_unsupported_note": "Shopbop / Nordstrom Rack / Saks OFF 5TH / SSENSE / Farfetch / Bloomingdale's / Gucci 같은 대형 종합몰·백화점몰·럭셔리 대기업은 '여러 브랜드를 판다'는 점에서 위 멀티브랜드 편집숍과 같지만, 이번 범위에서는 제외했다. 대부분 Salesforce Commerce Cloud 등 자체 플랫폼이라 공개 products.json이 없고, Akamai/PerimeterX 안티봇까지 겹쳐 있어 서버리스 함수의 단순 HTTP 요청으로는 접근 자체가 막힌다. 이 사이트들을 넣으려면 브라우저 자동화(로컬 실행)가 필요해 Vercel 범위 밖이다.",
-  "_japan_note": "일본은 이번 버전에 대상 사이트가 없다. Shopify보다 라쿠텐·조조타운 같은 대형 플랫폼이나 자체 EC 솔루션을 쓰는 브랜드가 대부분이라, 확신할 수 있는 Shopify 브랜드 공식몰 후보를 찾지 못했다. PRD.md에 나온 대로 라쿠텐 공식 개발자 API를 쓰는 게 정공법이지만, products.json과는 전혀 다른 API 구조라 별도 구현이 필요하다."
+  ]
 }

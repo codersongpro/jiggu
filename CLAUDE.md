@@ -24,13 +24,13 @@
 | 항목 | 결정 |
 |---|---|
 | 용도 | 재판매/셀러 소싱 기능(마진 계산·게시글 생성)을 그대로 유지하되, 실제 사용자는 운영자 본인과 가족 |
-| 대상 지역 | 미국, 유럽, 일본 |
-| 배포 | **Vercel** (정적 web/ + api/scan.js 서버리스 함수). 로컬 PC+스케줄러 전제(A3)는 폐기 |
-| 스캔 방식 | 스마트폰에서 스캔 버튼 터치 → 온디맨드 실시간 조회. 자동 주기 스캔(크론)은 다음 단계 |
+| 대상 지역 | 미국, 일본, 유럽(영국·독일·프랑스·이탈리아·스페인·네덜란드). 시장(marketCountry)과 원가 프로필(US/EU/JP)은 별개로 관리한다 |
+| 배포 | **Vercel** (정적 web/ + api/scan.js·api/config.js 서버리스 함수) + 사용자 PC 수집기(Playwright) |
+| 스캔 방식 | 스마트폰에서 스캔 버튼 터치 → 온디맨드 조회. 호출당 판매처 한 곳의 한 페이지(조각)씩 cursor로 이어받는다. 자동 주기 스캔(크론)은 다음 단계 |
 | 통관 모드 | `proxy`(구매대행)와 `business`(사업자 사입) 둘 다 지원. 기본값 proxy |
 | 산출물 | 모바일 웹 + 게시글 패키지 (엑셀 출력은 미완성) |
 | 발행 방식 | **자동 발행 불가** (네이버 글쓰기 API 종료). 복붙 + 이미지 공유가 최선 |
-| 구입처 결정 | 이번 1차 버전은 사이트 하나당 하나의 소스만 본다. 여러 몰 교차 매칭·최저가 자동 선택은 다음 단계 |
+| 구입처 결정 | 이번 버전은 판매처 하나당 하나의 소스만 본다. 여러 몰 교차 매칭·최저가 자동 선택은 다음 단계 |
 
 ---
 
@@ -44,42 +44,63 @@
 3. **사업자 사입에는 면세한도가 없다.** 같은 상품도 통관 모드에 따라 원가가 25% 차이난다.
 4. 환율은 매매기준율이 아니라 **카드 수수료를 더한 실질환율**을 쓴다.
 5. 관세·요율은 반드시 `config/cost.yaml`에서만 관리한다. **코드에 숫자를 넣지 않는다.**
+   계산 로직도 `web/shared/cost.js` 한 곳뿐이다 — 서버는 cost.yaml을 주입하고,
+   브라우저는 `GET /api/config`로 같은 설정을 받아 같은 함수를 돌린다.
+6. **조건이 검증되지 않은 시장은 계산하지 않는다.** 영국(GB)은 EU 규칙에 넣지 않고
+   원문 가격만 보존한 채 "원가 계산 미완료"로 표시한다.
 
 ---
 
-## 아키텍처 (Vercel 배포 버전, 1차)
+## 아키텍처 (Vercel + PC 수집기)
 
 ```
-[수집]   스마트폰 스캔 버튼 → api/scan.js(Vercel 서버리스) → config/targets.json에 등록된
-         Shopify 사이트들의 products.json을 병렬 조회 (온디맨드, 자동 주기 스캔 아님)
+[서버 수집] 스마트폰 스캔 버튼 → api/scan.js(Vercel 서버리스)
+            → 호출당 "판매처 한 곳의 목록 한 페이지"만 조회하고 nextCursor 반환
+            → 화면이 cursor를 따라가며 누적. 끝까지 이어받은 범위만 완전 수집으로 확정
    ↓
-[정규화] api/scan.js가 즉시 처리 — 사이즈/컬러/무게 추출, product_type으로 카테고리 보정
+[PC 수집]   scripts/local-crawler/crawl.js (Playwright)
+            → crawlers/ 어댑터가 목록 발견(discoverProducts) + 상세 Offer 추출(fetchOffers)
+            → 결과 JSON을 앱 설정 탭에서 가져오기
    ↓
-[브랜드 판별] product.vendor 필드를 우선 사용 → 멀티브랜드 편집숍도 브랜드 사전 등록 없이 잡힌다
+[피드]      scripts/feed-import/ — 제휴 네트워크 CSV/TSV/XML 피드를 같은 스키마로 변환
    ↓
-[원가]   api/_lib/landedCost.js  ← core/landed_cost.py를 Node로 포팅, 1원 단위까지 결과 일치 검증됨
+[공용 모듈] web/shared/ — 서버·PC·브라우저가 같은 코드를 쓴다
+            money(통화·숫자) / offers(옵션별 가격·재고) / urls(허용 검사) /
+            brands(브랜드 정본) / sources(판매처 정본) / schema(계약 v2) /
+            merge(병합·조각 누적) / cost(원가 계산)
    ↓
-[출력]   모바일 웹(web/index.html) — 원가 상세 / 구입처 / 이미지 선택 / 게시글 생성
+[출력]      web/index.html — 원가 상세 / 구입처 / 국내 시세 / 이미지 / 게시글
+            상품·수집 상태는 IndexedDB에 저장돼 새로고침 후 복원된다
 ```
 
-여러 몰의 같은 상품 매칭(최저가 구입처 자동 확정), 어제 대비 세일 급변 감지(신호),
-SQLite 저장은 이번 1차 범위 밖이다 — 아래 "미완성" 참고.
+### 절대 어기면 안 되는 데이터 규칙 (원가만큼 중요하다)
 
-### 브랜드 공식몰 vs 멀티브랜드 편집숍
-`config/targets.json`은 두 목록을 따로 둔다.
-- `sites`: 브랜드 공식몰. `brand` 필드가 곧 그 사이트가 파는 브랜드
-- `sites_multi_brand`: 여러 브랜드를 한 사이트에서 파는 편집숍(예: Bandier). `brand` 필드는
-  구입처(사이트) 이름일 뿐이고, 실제 상품 브랜드는 Shopify 응답의 `vendor` 필드에서 자동으로
-  읽는다 — **그래서 목록에 없는 브랜드가 갑자기 세일해도 미리 등록하지 않아도 잡힌다.**
-  단, 안티봇이 있는 대형 종합몰(Nordstrom Rack, Saks OFF 5TH 등)은 이 방식으로도 못 잡는다
-  (아래 리스크 참고).
+1. **가격·정가·재고·사이즈·SKU는 같은 옵션(variant/Offer)에서만 조합한다.**
+   다른 옵션의 정가를 끌어오면 실제로 없는 할인이 만들어진다.
+   AggregateOffer의 lowPrice/highPrice는 가격 범위지 할인 근거가 아니다.
+2. **통화는 명시된 값을 그대로 보존한다.** 모르는 통화를 USD로 바꾸지 않는다.
+   숫자 표기는 `web/shared/money.js` 한 곳에서만 해석한다(¥12,800 → 12800).
+3. **판매처(sourceId)와 브랜드(brandId)는 다르다.** REI 한 곳에서 여러 브랜드가 나온다.
+   삭제·병합 키는 `sourceId + 상품 + variant`다. 브랜드명이나 구입처 이름으로 지우지 않는다.
+4. **부분 실패로 데이터를 지우지 않는다.** 같은 수집 범위를 처음부터 끝까지 봤을 때
+   (`complete: true`)만 그 범위에서 사라진 상품을 정리한다.
+5. **조건이 검증되지 않은 시장은 계산하지 않는다.** GB는 EU 규칙에 넣지 않고
+   원문 가격만 보존한 채 "원가 계산 미완료"로 표시한다.
+6. **수집 상태를 뭉개지 않는다.** 200 HTML·products 없는 JSON·403·404·429·타임아웃은
+   각각 다른 상태다. 개별 상품 404를 사이트 전체 차단으로 바꾸지 않는다.
+7. **봇 차단은 우회하지 않는다.** 403/캡차가 확인되면 그 판매처는 중단하고 기록한다.
+   TLS 지문 위장·Stealth·주거용 프록시·캡차 자동 풀이는 만들지 않는다.
 
-### 이전 계획(폐기) — 참고용
-아래는 로컬 PC + 크론 전제였던 PRD.md 원안이다. Vercel 온디맨드 스캔으로 전환하며 폐기했지만,
-2단 스캔·세일 감지·상품 매칭 아이디어는 저장소를 붙이는 다음 단계에서 재사용할 수 있다.
+### 판매처 목록 — config/targets.json 하나가 정본
 
-- **라이트 스캔** 30분~1시간: 브랜드별 세일 카테고리 첫 페이지만. Shopify면 `/collections/sale/products.json?limit=250` 한 번
-- **풀 스캔** 하루 1회 새벽: 전체 상품 + 사이즈별 재고
+서버 스캔·PC 수집기·웹 필터가 모두 이 파일을 읽는다(예전 `scripts/local-crawler/sites.json`은
+여기로 이관됐다). 항목별 필드 설명은 파일 상단 `_fields`에 있다.
+
+- `kind`: `official`(그 브랜드 공식몰) / `multi_brand`(편집숍 — 실제 브랜드는 상품에서 읽는다)
+- `runtime`: `server`(Vercel에서 조회) / `pc`(브라우저 수집기)
+- `adapter`: `shopify-products-json` / `jsonld-browser` / `rei-us`
+- `region`: 원가 프로필(US/EU/JP). 모르면 `null` → 원가 계산 미완료
+- `support.status`: `supported`는 **실제 수집 결과를 확인한 뒤에만** 붙인다
 
 ### 세일 감지 규칙
 | 신호 | 조건 |
@@ -111,98 +132,48 @@ SQLite 저장은 이번 1차 범위 밖이다 — 아래 "미완성" 참고.
 
 ## 현재 상태
 
-### 완성
-- `core/landed_cost.py` — 원가·마진 계산 엔진(Python, 참고/검증용). 실행 검증 완료
-- `api/_lib/landedCost.js` — 위 로직의 Node 포팅. Python과 1원 단위까지 결과 일치 검증
-- `config/cost.yaml` — 관세·환율·배대지·수수료 설정
-- `config/targets.json` — 스캔 대상 (브랜드 공식몰 70여 곳 + 멀티브랜드 편집숍, 미국+유럽).
-  `verified` 필드로 Shopify 사용 확신도 표시. **이 세션은 외부망이 막혀 있어 실제 접속 검증을
-  못했다 — 배포 후 스캔해서 `errors`에 뭐가 실패하는지 반드시 확인할 것**. 일본은 확신 가능한
-  Shopify 후보가 없어 보류(`_japan_note` 참고)
-- `api/scan.js` — Vercel 서버리스 스캔 함수. `products.json` 병렬(사이트당 최대 4페이지) 조회,
-  `vendor` 필드로 멀티브랜드 자동 판별, `product_type`으로 카테고리 자동 보정, 세일 아닌 상품도
-  포함(사이트당 세일 우선 70% + 저가순 정가상품 30%로 캡), 스캔 시점 실시간 환율(frankfurter.dev)
-  반영, 사이트 하나 실패해도 나머지는 진행. 쿼리파라미터로 스캔 범위 조절:
-  `?onlyPopular=1`(targets.json의 `popular:true` 사이트만, Sale중 탭 전용) /
-  `?brand=이름`(그 브랜드 사이트만 **캡 없이** 전체 — 상품탭 확인 버튼 전용)
-- `api/korea-price.js` — 국내 시세 온디맨드 조회(네이버쇼핑). 상품 상세를 열 때만 그 상품 하나를
-  조회한다(스캔 전체를 비교하는 건 타임아웃상 불가능). `NAVER_CLIENT_ID`/`NAVER_CLIENT_SECRET`
-  환경변수가 없으면 "설정 필요" 응답만 내려주고 나머지 기능은 그대로 동작. 브랜드+영문 상품명
-  키워드 검색이라 정확도가 낮아 `confidence: "low"`로 항상 표시
-- `web/index.html` — 모바일 프론트. `/api/scan` 연동 완료
-  - Sale중(이번 스캔 요약) / 검색+브랜드 자동완성(초성 검색)+브랜드·가격대·종류 드롭다운 필터
-    +정렬(추천/가격순)+확인 버튼 / 원가 상세 / 국내 시세 비교 / 구입처 / 이미지 선택+클립보드
-    복사 / 게시글 생성
-  - **Sale중 탭과 상품탭은 완전히 분리돼 있다.** 헤더 스캔 버튼(Sale중, 인기 브랜드만)과 상품탭
-    확인 버튼(전체 브랜드 또는 지정 브랜드 전량)은 서로 다른 API 호출이고, 서로의 상태
-    (`SIGNALS`/`ITEMS`, `lastSignalScanMeta`/`lastProductScanMeta`)를 건드리지 않는다
-  - 상품탭에서 브랜드를 지정하고 확인을 누르면 그 브랜드는 캡 없이 전부 가져온다 — 세일 아니거나
-    저가 30% 안에 못 든 상품도 "정가" 뱃지로 찾을 수 있다
-  - 원가 계산과 게시글 생성은 **실제로 동작**한다
-- `vercel.json`, `package.json` — Vercel 배포 설정
+### 완성 (2026-09-08 개선 계획 T00~T09 반영)
+- `web/shared/*` — 서버·PC·브라우저 공용 모듈. 계산·정규화·병합이 한 곳에만 있다
+- `api/scan.js` — 조각(cursor) 단위 스캔. 브랜드 지정 시 관련 판매처만, 중복 요청 없음,
+  상태 분류(ok/empty/partial/parse_error/render_required/blocked/unsupported_endpoint/
+  rate_limited/timeout/http_error)와 httpStatus·Retry-After 기록
+- `api/config.js` — 브라우저용 계산 설정(GET /api/config). 화면 내 요율 하드코딩 제거
+- `api/_lib/landedCost.js` — `web/shared/cost.js` 서버 래퍼 (cost.yaml 주입)
+- `crawlers/` — jsonld / links / generic-jsonld / rei-us 어댑터
+- `scripts/local-crawler/crawl.js` — CLI 계약(--source/--countries/--brand/--limit/
+  --resume/--business/--output), 이어받기, 요청 간격·재시도·한도, 종료 코드 0/2/1
+- `scripts/feed-import/` — 숫자·통화·재고·XML 파싱 수정, schemaVersion 2 출력
+- `scripts/export-excel.js` — 수집 결과 → 엑셀(상품/판매처 상태/브랜드 요약/실행 정보 4시트).
+  원가는 저장값이 아니라 지금 cost.yaml 기준으로 재계산하고, 계산 불가 시장은 칸을 비운다
+- `config/targets.json` — 판매처 정본(102곳: 서버 82 + PC 20). 8개국 검증 후보 등록
+- `config/cost.yaml` — `markets` 섹션 추가(시장 → 통화·원가 프로필·VAT). GB는 프로필 없음
+- `web/index.html` — 안전 렌더링(textContent), 원자적 가져오기, IndexedDB 복원,
+  국가·판매처 필터, 서버와 일치하는 원가, 조각 스캔 진행
+- `tests/` — `npm test` 94건 (네트워크 미사용. 브라우저 회귀는 fixture 라우팅)
 
-### 실제 배포 스캔으로 확인된 사실 (2026-09-03)
-`config/targets.json`의 `verified: "unconfirmed"` 사이트들을 배포 후 실제로 스캔해봤다.
-아래 19곳은 `verified: "blocked"`로 표시하고 `api/scan.js`가 스캔 대상에서 아예 제외하도록
-고쳤다 (매번 같은 실패를 반복해 타임아웃 예산만 낭비하므로).
+### 실제 배포 스캔으로 확인된 차단 사이트 (2026-09-03 / 09-05)
+코치·마이클코어스·케이트스페이드·랄프로렌·뉴발란스·라코스테·레포메이션·올세인츠·가니·
+아크테릭스·파타고니아·룰루레몬·골든구스·어그·살로몬 등 35곳이 403/404/410/503/파싱 에러로
+실패해 `support.status: "blocked"`로 기록돼 있고 스캔 대상에서 제외된다.
+**이번 작업에서 재확인한 것은 아니다** — 기록을 그대로 보존했다.
 
-| 브랜드 | 에러 |
-|---|---|
-| 레포메이션, 산드로, 마쥬, 자디앤볼테르, 마크제이콥스, 롱샴(파싱 에러) | HTTP 404 |
-| 올세인츠, 라코스테, 코치, 코치 아울렛, 뉴발란스, COS, 케이트스페이드, 케이트스페이드 아울렛, 마이클코어스 | HTTP 403 |
-| 띠어리, 폴로 랄프로렌 | HTTP 410 |
-| 토리버치 | HTTP 503 |
-| 가니 | fetch failed |
-
-레포메이션·올세인츠·가니는 원래 `verified: "confirmed"`(Shopify Plus 사례로 알려진 곳)였는데도
-실패했다 — 즉 Shopify 자체가 아니라서가 아니라, **서버사이드(Vercel 서버리스) 요청 자체를
-막는 안티봇/WAF**일 가능성이 크다. 코치·마이클코어스·케이트스페이드·랄프로렌·뉴발란스·라코스테처럼
-전세계적으로 유명한 대형 브랜드가 대거 포함된 것도 이 해석과 맞는다 — Nordstrom Rack/SSENSE와
-같은 부류로 봐야 한다.
-
-### 2차 스캔 결과 (2026-09-05)
-남아 있던 `unconfirmed` 사이트 중 16곳도 같은 패턴(403/404/410/파싱 에러/타임아웃)으로
-실패해 `verified: "blocked"` 처리했다.
-
-| 브랜드 | 에러 |
-|---|---|
-| 살로몬, 아크테릭스, 파타고니아, 바버, 칼하트, 셀프포트레이트, 쟈딕앤볼테르 EU | HTTP 404 |
-| 페라가모, 룰루레몬, 막스마라 | HTTP 403 |
-| 골든구스, 어그 | HTTP 410 |
-| 온러닝, 산드로 EU, 마쥬 EU(파싱 에러) | `Unexpected token '<'` |
-| 가니 EU | 타임아웃(aborted) |
-
-남은 `unconfirmed` 사이트(Isabel Marant, Cuyana, Naadam, M.Gemi, Marine Layer, Faherty, Kotn,
-Veja, Reiss, Vince, Free People, Aritzia, Staud, Stance, Cotopaxi, Vuori, Chubbies, Untuckit,
-ThirdLove, Taylor Stitch, Rowing Blazers, Birdies, Verishop, The Webster, Kirna Zabete 등)는
-아직 스캔 결과가 확인되지 않았다 — 다음 스캔에서 결과를 봐야 한다.
-
-### 미완성 — 여기서부터 작업
-- [ ] 여러 몰 교차 매칭 → 최저가 구입처 자동 선택 (지금은 사이트 하나당 소스 하나만 본다)
-- [ ] 스캔 결과 저장소(Vercel Postgres/KV 등) → 어제 대비 세일 급변 감지("Sale중" 탭) 복원
-- [ ] `core/normalize.py` 격 — 브랜드·사이즈·스타일코드 표준화 (지금은 vendor 필드 그대로 씀)
-- [ ] 국내 시세 매칭 정확도 — 지금은 키워드 검색뿐. SKU/바코드 매칭으로 올리는 게 다음 단계
-- [ ] `output/excel.py`
+### 미검증 — 여기서부터 확인이 필요하다
+- [ ] **라이브 수집 검증(Q11)** — 이 작업 세션은 외부망이 막혀 REI·BEAMS·END 등
+      어떤 사이트도 실제로 수집하지 못했다. 신규 판매처는 전부 `unverified`다.
+      확인 방법과 기록 양식은 `docs/VERIFICATION.md` 4장에 있다
+- [ ] 여러 몰 교차 매칭 → 최저가 구입처 자동 선택 (지금은 판매처 하나당 소스 하나)
+- [ ] 스캔 결과 저장소(Vercel Postgres/KV 등) → 어제 대비 세일 급변 감지 복원
+- [ ] 국내 시세 매칭 정확도 (키워드 검색 → SKU/바코드 매칭)
 - [ ] 텔레그램 알림
-- [x] Shopify가 아닌 사이트(REI 등) → `scripts/local-crawler/` 추가. PC에서 Playwright로 열어
-      JSON-LD(schema.org)를 읽고, 설정 탭에서 결과 JSON을 가져와 상품탭에 합친다
-- [x] 봇 차단이 걸린 사이트(코치·마이클코어스·케이트스페이드·랄프로렌 등) → **우회하지 않고**
-      어필리에이트 공식 상품 피드로 간다. `scripts/feed-import/`가 CJ·Rakuten·Awin·Impact·
-      Google Shopping 형식의 CSV/TSV/XML 피드를 읽어 앱 스키마로 변환한다.
-      TLS 지문 위장·Stealth 플러그인·주거용 프록시·캡차 자동 풀이는 만들지 않는다
-- [ ] 피드 자동 갱신 — 지금은 대시보드에서 파일을 받아 수동 변환한다. 네트워크 API 키를 받으면
-      매일 자동으로 받아오게 만들 수 있다 (키는 반드시 환경변수로)
-- [ ] 일본은 라쿠텐 공식 API 연동이 정공법(별도 구현 필요)
+- [ ] 피드 자동 갱신 (키는 반드시 환경변수로)
+- [ ] 일본 라쿠텐 공식 API 연동
 - [ ] 상품명 한글 번역 (지금은 영문 원문 그대로 표시)
 
 ### 아직 결정 안 된 것 — 진행 전에 사용자에게 물어야 함
 1. 카페 게시글 **본문 실제 형식** (현재 템플릿은 추정본이다)
 2. 배대지 업체 → `cost.yaml` 요율표를 실제값으로 교체
-3. ~~`config/targets.json`의 `verified: unconfirmed` 사이트들 — 배포 후 스캔해서 실제로 걸리는
-   곳만 남기고 정리할 것~~ → 2026-09-03 1차 정리 완료(19곳 `blocked` 처리). 남은
-   `unconfirmed` 사이트들도 다음 스캔 결과가 오면 마저 정리할 것
-
----
+3. 영국(GB) 시장의 VAT 환급·배대지 조건 — 확정되면 `cost.yaml`의 `markets.GB`에
+   `cost_profile`을 넣어야 원가가 계산된다
 
 ## 작업 규칙
 

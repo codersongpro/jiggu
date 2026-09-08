@@ -5,6 +5,10 @@
       "maxDuration": 60,
       "includeFiles": "config/**"
     },
+    "api/config.js": {
+      "maxDuration": 10,
+      "includeFiles": "config/**"
+    },
     "api/korea-price.js": {
       "maxDuration": 15
     }

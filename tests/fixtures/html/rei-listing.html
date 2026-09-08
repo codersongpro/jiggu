@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html lang="en"><head><title>Clothing (fixture)</title></head>
+<body>
+  <div id="root"></div>
+  <script>
+    // 지연 렌더링 흉내 — DOMContentLoaded 뒤에 상품 링크가 생긴다
+    setTimeout(function () {
+      document.getElementById('root').innerHTML =
+        '<a href="/product/184879/sample-hoodie">Sahara Shade Hoodie</a>' +
+        '<a href="https://www.rei.com/product/184879/sample-hoodie?color=black">same product, absolute</a>' +
+        '<a href="//www.rei.com/product/235803/sample-pants">Trailmade Pants</a>' +
+        '<a href="/search?q=jacket">Search</a>';
+    }, 250);
+  </script>
+</body></html>
