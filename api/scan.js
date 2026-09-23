@@ -22,6 +22,13 @@ const PRODUCTS_PER_PAGE = 250; // Shopify products.json이 허용하는 최대 l
 const MAX_PAGES_PER_SOURCE = 8; // 한 소스에서 이어받을 수 있는 최대 페이지 (cursor 검증용)
 const MAX_ITEMS_PER_CHUNK = 25; // 브랜드 미지정 스캔의 응답 크기 제한 (지정 스캔은 캡 없음)
 
+// 세일 스캔(scope=sale) — Shopify 세일 컬렉션(/collections/<handle>/products.json)을 읽는다.
+// 전체 목록 1페이지(신상·액세서리 위주)를 훑던 예전 방식은 세일을 거의 못 잡았다.
+const DEFAULT_SALE_HANDLES = ["sale"]; // 판매처별 핸들은 targets.json의 saleCollections로 지정
+const SALE_BATCH = 5; // 호출당 동시에 볼 판매처 수 (서로 다른 도메인이라 도메인당 동시 1)
+const MAX_SALE_PAGES = 2; // 판매처당 세일 컬렉션 최대 페이지 (250 × 2)
+const MAX_SALE_ITEMS_PER_SOURCE = 200; // 응답 크기 제한 — 할인율 높은 순으로 자른다
+
 const S = schema.SOURCE_STATUS;
 const { sources: SOURCES, errors: SOURCE_ERRORS } = sourcesLib.loadSources(targets);
 
@@ -95,6 +102,17 @@ async function fetchJson(url) {
 }
 
 // 스캔 시점 실시간 환율. 키가 필요 없는 무료 API(유럽중앙은행 기반)를 쓴다.
+// 조각마다 다른 환율로 원가를 계산하면 한 번의 스캔 안에서 값이 섞인다(예전에는 첫 조각만
+// 실시간, 나머지는 cost.yaml 고정값이었다). 인스턴스 안에서 30분 캐시해 모든 조각이 같은 값을 쓴다.
+const FX_CACHE_MS = 30 * 60 * 1000;
+let fxCache = null;
+async function cachedLiveFxRates() {
+  if (fxCache && Date.now() - fxCache.at < FX_CACHE_MS) return fxCache.value;
+  const value = await fetchLiveFxRates();
+  fxCache = { at: Date.now(), value };
+  return value;
+}
+
 async function fetchLiveFxRates() {
   const data = await fetchJsonPlain("https://api.frankfurter.dev/v1/latest?base=KRW&symbols=USD,EUR,JPY");
   const r = data && data.rates;
@@ -131,6 +149,156 @@ function makeCursor(plan, sourceIndex, page) {
   return `${plan[sourceIndex].sourceId}:${page}`;
 }
 
+/** Shopify 상품 배열 → 원가까지 붙은 앱 상품 */
+function toItems(products, source, cfg, mode, brandId) {
+  const normalized = [];
+  let rejected = 0;
+  products.forEach((p) => {
+    const item = normalizeProduct(p, source);
+    if (!item) {
+      rejected++;
+      return;
+    }
+    if (brandId && !brands.sameBrand(item.brandId || item.brand, brandId)) return;
+    const cost = landedCost(
+      cfg,
+      {
+        price: item.salePrice,
+        currency: item.currency,
+        marketCountry: item.marketCountry,
+        region: item.region,
+        category: item.category,
+        weight_kg: item.weightKg,
+      },
+      mode
+    );
+    normalized.push(Object.assign({}, item, { cost, collectedAt: new Date().toISOString(), scopeId: null }));
+  });
+  return { normalized, rejected };
+}
+
+/** 정상 응답으로 볼 수 있는 상태 — partial은 "일부만 확인"이지 실패가 아니다 */
+function isFailure(status) {
+  return status !== S.OK && status !== S.EMPTY && status !== S.PARTIAL;
+}
+
+/**
+ * 판매처 하나의 세일 컬렉션을 읽는다.
+ * 세일 컬렉션이 없으면(404) 전체 목록 첫 페이지에서 세일 상품만 고르고 partial로 표시한다.
+ */
+async function scanSaleSource(source, cfg, mode, opts) {
+  const started = Date.now();
+  const scope = opts.scope;
+  const handles = Array.isArray(source.saleCollections) && source.saleCollections.length ? source.saleCollections : DEFAULT_SALE_HANDLES;
+
+  let products = [];
+  let pages = 0;
+  let listingUrl = null;
+  let status = null;
+  let failure = null;
+  let note = null;
+
+  for (const handle of handles) {
+    const collected = [];
+    let p = 1;
+    let lastErr = null;
+    for (; p <= MAX_SALE_PAGES; p++) {
+      const url = `${source.baseUrl}/collections/${encodeURIComponent(handle)}/products.json?limit=${PRODUCTS_PER_PAGE}&page=${p}`;
+      try {
+        const data = await fetchJson(url);
+        if (p === 1) listingUrl = url;
+        pages++;
+        collected.push(...data.products);
+        if (data.products.length < PRODUCTS_PER_PAGE) break;
+      } catch (err) {
+        lastErr = err;
+        break;
+      }
+    }
+    if (lastErr && p === 1) {
+      // 이 핸들은 없다 → 다음 핸들. 404가 아닌 오류(403·429·타임아웃)는 거기서 멈춘다
+      if (lastErr.status === S.UNSUPPORTED_ENDPOINT) continue;
+      failure = lastErr;
+      listingUrl = `${source.baseUrl}/collections/${handle}/products.json`;
+      break;
+    }
+    products = collected;
+    if (lastErr) {
+      status = S.PARTIAL;
+      note = `세일 컬렉션 ${p}페이지에서 멈춤: ${lastErr.message}`;
+    } else if (p > MAX_SALE_PAGES) {
+      status = S.PARTIAL;
+      note = `세일 상품이 ${PRODUCTS_PER_PAGE * MAX_SALE_PAGES}개를 넘어 앞부분만 확인했습니다`;
+    } else {
+      status = products.length ? S.OK : S.EMPTY;
+    }
+    break;
+  }
+
+  // 세일 컬렉션이 하나도 없으면 전체 목록 첫 페이지에서 세일 상품만 고른다
+  if (!failure && status === null) {
+    const url = `${source.baseUrl}/products.json?limit=${PRODUCTS_PER_PAGE}&page=1`;
+    listingUrl = url;
+    try {
+      const data = await fetchJson(url);
+      pages++;
+      products = data.products;
+      status = S.PARTIAL;
+      note = "세일 컬렉션이 없어 전체 목록 첫 페이지에서 세일 상품만 골랐습니다 (targets.json saleCollections로 핸들 지정 가능)";
+    } catch (err) {
+      failure = err;
+    }
+  }
+
+  if (failure) {
+    return {
+      items: [],
+      sourceResult: schema.makeSourceResult(source, {
+        scope,
+        status: failure.status || S.HTTP_ERROR,
+        httpStatus: failure.httpStatus,
+        stage: failure.stage || "fetch",
+        retryAfter: failure.retryAfter || null,
+        error: failure.message,
+        pages: Math.max(pages, 1),
+        listingUrl,
+        complete: false,
+      }),
+    };
+  }
+
+  const { normalized, rejected } = toItems(products, source, cfg, mode, opts.brandId);
+  const onSale = normalized.filter((it) => it.listPrice > it.salePrice).sort((a, b) => b.offRate - a.offRate);
+  let items = onSale;
+  if (items.length > MAX_SALE_ITEMS_PER_SOURCE) {
+    items = items.slice(0, MAX_SALE_ITEMS_PER_SOURCE);
+    status = S.PARTIAL;
+    note = `세일 상품 ${onSale.length}개 중 할인율 높은 ${MAX_SALE_ITEMS_PER_SOURCE}개만 반환했습니다`;
+  }
+
+  const sourceResult = schema.makeSourceResult(source, {
+    scope,
+    status,
+    httpStatus: 200,
+    stage: null,
+    discovered: products.length,
+    fetched: products.length,
+    accepted: items.length,
+    rejected: rejected + (normalized.length - items.length),
+    pages,
+    listingUrl,
+    complete: false,
+    error: note,
+  });
+  sourceResult.durationMs = Date.now() - started;
+  sourceResult.saleCount = onSale.length;
+  const scopeId = schema.scopeKey(sourceResult);
+  items.forEach((it) => {
+    it.scopeId = scopeId;
+  });
+  return { items, sourceResult };
+}
+
 /** 소스 하나의 한 페이지를 조회한다 */
 async function scanSourcePage(source, page, cfg, mode, opts) {
   const url = `${source.baseUrl}/products.json?limit=${PRODUCTS_PER_PAGE}&page=${page}`;
@@ -159,29 +327,7 @@ async function scanSourcePage(source, page, cfg, mode, opts) {
   }
 
   const products = data.products;
-  const normalized = [];
-  let rejected = 0;
-  products.forEach((p) => {
-    const item = normalizeProduct(p, source);
-    if (!item) {
-      rejected++;
-      return;
-    }
-    if (opts.brandId && !brands.sameBrand(item.brandId || item.brand, opts.brandId)) return;
-    const cost = landedCost(
-      cfg,
-      {
-        price: item.salePrice,
-        currency: item.currency,
-        marketCountry: item.marketCountry,
-        region: item.region,
-        category: item.category,
-        weight_kg: item.weightKg,
-      },
-      mode
-    );
-    normalized.push(Object.assign({}, item, { cost, collectedAt: new Date().toISOString(), scopeId: null }));
-  });
+  const { normalized, rejected } = toItems(products, source, cfg, mode, opts.brandId);
 
   const onSale = normalized.filter((it) => it.listPrice > it.salePrice).sort((a, b) => b.offRate - a.offRate);
   const regular = normalized
@@ -191,8 +337,10 @@ async function scanSourcePage(source, page, cfg, mode, opts) {
   let items = [...onSale, ...regular];
   let capped = false;
   if (!opts.uncapped && items.length > MAX_ITEMS_PER_CHUNK) {
-    const saleSlots = Math.ceil(MAX_ITEMS_PER_CHUNK * 0.7);
-    items = [...onSale.slice(0, saleSlots), ...regular.slice(0, MAX_ITEMS_PER_CHUNK - saleSlots)];
+    // 세일 상품에 70%를 먼저 배정하되, 세일이 적으면 남는 칸을 일반 상품으로 채운다
+    // (예전에는 세일 0건일 때 일반 상품 7건만 돌려줬다 — 2026-09-23 배포 스캔에서 확인)
+    const saleTake = Math.min(onSale.length, Math.max(Math.ceil(MAX_ITEMS_PER_CHUNK * 0.7), MAX_ITEMS_PER_CHUNK - regular.length));
+    items = [...onSale.slice(0, saleTake), ...regular.slice(0, MAX_ITEMS_PER_CHUNK - saleTake)];
     capped = true;
   }
 
@@ -231,6 +379,7 @@ module.exports = async function handler(req, res) {
   const onlyPopular = q.onlyPopular === "1";
   const sourceIdParam = q.sourceId ? String(q.sourceId).trim() : "";
   const marketCountry = q.marketCountry ? String(q.marketCountry).trim().toUpperCase() : "";
+  const saleScope = q.scope === "sale";
 
   const cfg = loadConfig();
 
@@ -239,7 +388,7 @@ module.exports = async function handler(req, res) {
     runtime: "server",
     adapters: ["shopify-products-json"],
     brandId: brandId || null,
-    onlyPopular,
+    onlyPopular: saleScope ? false : onlyPopular,
     sourceIds: sourceIdParam ? [sourceIdParam] : null,
     marketCountries: marketCountry ? [marketCountry] : null,
   });
@@ -274,21 +423,24 @@ module.exports = async function handler(req, res) {
     return;
   }
 
-  // 환율은 첫 조각에서만 가져온다 (조각마다 외부 API를 때리지 않는다)
+  // 환율 — 캐시된 실시간 값을 모든 조각에 똑같이 쓴다. 실패하면 cost.yaml 고정값
   let fxSource = "cost.yaml 고정값";
   let fxAsOf = (cfg.fx && cfg.fx.as_of) || null;
-  if (!q.cursor) {
-    try {
-      const live = await fetchLiveFxRates();
-      cfg.fx.base_rate = Object.assign({}, cfg.fx.base_rate, live.rates);
-      fxSource = "실시간(frankfurter.dev, ECB 기준)";
-      fxAsOf = live.asOf || fxAsOf;
-    } catch (e) {
-      // 환율 API가 막히면 cost.yaml 고정값으로 계속 진행한다
-    }
+  try {
+    const live = await cachedLiveFxRates();
+    cfg.fx.base_rate = Object.assign({}, cfg.fx.base_rate, live.rates);
+    fxSource = "실시간(frankfurter.dev, ECB 기준)";
+    fxAsOf = live.asOf || fxAsOf;
+    cfg.fx.source = fxSource;
+    if (live.asOf) cfg.fx.as_of = live.asOf;
+  } catch (e) {
+    // 환율 API가 막히면 cost.yaml 고정값으로 계속 진행한다
   }
 
-  const scope = brandId
+  // 세일 스캔은 브랜드를 지정해도 "세일 컬렉션" 범위다 — 전체 목록 범위와 섞지 않는다
+  const scope = saleScope
+    ? { kind: "sale", value: brandId || null }
+    : brandId
     ? { kind: "brand", value: brandId }
     : onlyPopular
     ? { kind: "popular", value: null }
@@ -303,39 +455,65 @@ module.exports = async function handler(req, res) {
   let page = cursor.page;
   let nextCursor = null;
 
-  // 예산 안에서 가능한 만큼 처리하되, 기본은 "한 소스의 한 페이지"다.
-  while (sourceIndex < plan.length) {
+  const pushError = (source, sr) => {
+    if (!isFailure(sr.status)) return;
+    errors.push({
+      sourceId: source.sourceId,
+      brand: source.shopName,
+      domain: source.domain,
+      status: sr.status,
+      httpStatus: sr.httpStatus,
+      error: sr.error,
+    });
+  };
+
+  if (saleScope) {
+    // 세일 스캔: 호출당 판매처 SALE_BATCH곳을 병렬로 본다(서로 다른 도메인, 도메인당 요청은 순차).
+    const batch = plan.slice(sourceIndex, sourceIndex + SALE_BATCH);
+    const results = await Promise.all(
+      batch.map((source) =>
+        // 한 판매처의 예외가 같은 묶음의 다른 판매처 결과까지 날리지 않게 판매처별로 가둔다
+        scanSaleSource(source, cfg, mode, { brandId: brandId || null, scope }).catch((err) => ({
+          items: [],
+          sourceResult: schema.makeSourceResult(source, {
+            scope,
+            status: S.PARSE_ERROR,
+            stage: "parse",
+            error: String((err && err.message) || err).slice(0, 120),
+            pages: 1,
+            complete: false,
+          }),
+        }))
+      )
+    );
+    results.forEach((r, i) => {
+      items.push(...r.items);
+      sourceResults.push(r.sourceResult);
+      pushError(batch[i], r.sourceResult);
+    });
+    sourceIndex += batch.length;
+    nextCursor = makeCursor(plan, sourceIndex, 1);
+  } else {
+    // 목록/브랜드 스캔: 호출당 "한 소스의 한 페이지"
     const source = plan[sourceIndex];
     const result = await scanSourcePage(source, page, cfg, mode, {
       brandId: brandId || null,
       uncapped: !!(brandId || sourceIdParam),
       scope,
     });
-
     items.push(...result.items);
     sourceResults.push(result.sourceResult);
-    if (result.sourceResult.status !== S.OK && result.sourceResult.status !== S.EMPTY) {
-      errors.push({
-        sourceId: source.sourceId,
-        brand: source.shopName,
-        domain: source.domain,
-        status: result.sourceResult.status,
-        httpStatus: result.sourceResult.httpStatus,
-        error: result.sourceResult.error,
-      });
-    }
+    pushError(source, result.sourceResult);
 
     if (result.exhausted) {
       sourceIndex += 1;
       page = 1;
-      // sourceId를 지정한 호출은 그 판매처 안에서만 진행한다
-      if (sourceIdParam) break;
     } else {
       page += 1;
     }
-
     nextCursor = makeCursor(plan, sourceIndex, page);
-    break; // 호출당 한 페이지 — 나머지는 웹이 cursor로 이어서 요청한다
+    // sourceId를 지정한 호출은 그 판매처 안에서만 진행한다
+    if (sourceIdParam && result.exhausted) nextCursor = null;
   }
 
   if (sourceIndex >= plan.length) nextCursor = null;
@@ -365,7 +543,7 @@ module.exports = async function handler(req, res) {
     sourceResults,
     // 아래 세 값은 "이번 조각에서 처리한 소스 수"다. 전체 진행률은 웹이 누적한다.
     sitesTotal: sourceResults.length,
-    sitesOk: sourceResults.filter((r) => r.status === S.OK || r.status === S.EMPTY).length,
+    sitesOk: sourceResults.filter((r) => !isFailure(r.status)).length,
     sitesFailed: errors.length,
     itemCount: items.length,
     brandSummary,
@@ -381,6 +559,7 @@ module.exports = async function handler(req, res) {
 
 // 테스트용 노출 (Vercel은 module.exports가 함수면 그대로 핸들러로 쓴다)
 module.exports.scanSourcePage = scanSourcePage;
+module.exports.scanSaleSource = scanSaleSource;
 module.exports.parseCursor = parseCursor;
 module.exports.classifyHttp = classifyHttp;
 module.exports.SOURCES = SOURCES;

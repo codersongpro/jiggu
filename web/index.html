@@ -429,8 +429,9 @@ nav button.on .dot{opacity:1}
     </div>
     <div class="sect">
       <h3>연결 상태</h3>
-      <p class="note">'Sale중' 탭의 스캔 버튼을 누르면 <code>/api/scan</code>이 config/targets.json에 등록된
-      판매처를 <b>한 번에 한 곳의 한 페이지씩</b> 조회하고, 화면이 다음 위치(cursor)를 따라가며 이어붙입니다.
+      <p class="note">'Sale중' 탭의 스캔 버튼을 누르면 <code>/api/scan?scope=sale</code>이 config/targets.json에 등록된
+      모든 활성 판매처의 <b>세일 컬렉션</b>을 한 번에 5곳씩 조회하고, 화면이 다음 위치(cursor)를 따라가며 이어붙입니다.
+      상품 탭의 조회는 판매처 한 곳의 한 페이지씩 전체 목록을 읽습니다.
       끝까지 이어받은 범위만 "완전 수집"으로 처리하므로 중간에 실패해도 기존 목록이 지워지지 않습니다.
       상품명은 영문 원문 그대로 표시되니 게시글 작성 시 다듬어 쓰세요.
       전일 대비 세일 변화(신호)는 스캔 기록이 쌓여야 표시할 수 있어 이번 버전에서는 제공하지 않습니다.</p>
@@ -1034,7 +1035,7 @@ function statusLine(){
   const parts = [];
   const results = PRODUCT_STATE.sourceResults || [];
   if(results.length){
-    const ok = results.filter(r => r.status === 'ok' || r.status === 'empty').length;
+    const ok = results.filter(r => r.status === 'ok' || r.status === 'empty' || r.status === 'partial').length;
     const failed = results.length - ok;
     parts.push(`판매처 ${ok}/${results.length}곳 확인됨${failed ? ` · ${failed}곳 실패(아래 목록)` : ''}`);
   }
@@ -1442,7 +1443,8 @@ async function runChunkedScan(params, onProgress){
     chunks,
     errors,
     meta: meta ? {
-      sitesOk: (acc.finalize(finished).sourceResults || []).filter(r => r.status === 'ok' || r.status === 'empty').length,
+      // partial(일부만 확인)은 응답은 정상이므로 확인한 판매처로 센다. 실패 목록(errors)에는 넣지 않는다
+      sitesOk: (acc.finalize(finished).sourceResults || []).filter(r => r.status === 'ok' || r.status === 'empty' || r.status === 'partial').length,
       sitesTotal: (acc.finalize(finished).sourceResults || []).length,
       sitesFailed: errors.length,
       itemCount: acc.size,
@@ -1465,12 +1467,13 @@ function applyFxRates(fxRates, fxAsOf, fxSource){
   $('#cfgStatus').textContent = `환율 ${fxSource || ''}${fxAsOf ? ' · 기준일 ' + fxAsOf : ''}`;
 }
 
-/* Sale중 탭 전용 스캔 — 인기 브랜드만. 상품탭은 건드리지 않는다. */
+/* Sale중 탭 전용 스캔 — 활성 판매처 전체의 세일 컬렉션. 상품탭은 건드리지 않는다.
+   예전에는 인기(popular) 판매처만 봤는데, 인기 판매처 대부분이 차단돼 실제로는 2곳만 조회했다. */
 async function runScan(){
   const b = $('#scanBtn');
   b.disabled = true; b.textContent = '스캔 중';
   try{
-    const run = await runChunkedScan({onlyPopular: '1'}, p => { b.textContent = `스캔 ${p.chunks}`; });
+    const run = await runChunkedScan({scope: 'sale'}, p => { b.textContent = p.planned ? `스캔 ${Math.min(p.chunks * 5, p.planned)}/${p.planned}` : `스캔 ${p.chunks}`; });
     const merged = Merge.mergeResult(SIGNAL_STATE, run.result);
     SIGNAL_STATE = merged.state;
     SIGNALS = buildSignals(SIGNAL_STATE.items);

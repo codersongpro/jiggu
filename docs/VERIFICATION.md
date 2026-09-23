@@ -138,6 +138,53 @@ npm run crawl -- --countries DE,FR,IT,ES,NL --limit 20 --output output/eu.json
 실패한 곳은 `blocked`(403·캡차) 또는 `unverified`로 남기고, 실패 이유와 확인일을 함께 적는다.
 **대체 사이트로 REI의 필수 검증을 대신하지 않는다.**
 
+## 4-1. 2026-09-23 스캔 수정 — 배포본에서 실제로 확인한 것
+
+이 세션도 외부 쇼핑몰 도메인이 막혀 있었지만, **Vercel에 배포된 `/api/scan`은 외부 사이트에
+접근할 수 있어** 프로덕션(`ziggu.vercel.app`, 커밋 a19d292)을 직접 호출해 증상을 재현했다.
+
+| 확인 | 결과 |
+|---|---|
+| `GET /api/scan` (kith-us 1페이지) | HTTP 200, 상품 250개 수신 — **서버 수집 자체는 동작** |
+| `GET /api/scan?cursor=stussy-us:1` | HTTP 200, 상품 250개 수신 |
+| Sale중 '스캔' 버튼의 조회 대상(`onlyPopular`) | **2곳뿐**(isabel-marant-us, stussy-us). 인기 판매처 대부분이 blocked라서 |
+| 250개 받은 페이지의 반환 건수 | **7건** — 세일 상품이 0건이면 일반 상품 7칸만 채우던 버그 |
+| 응답 크기 제한으로 자른 페이지 | `partial` → **실패(sitesFailed)로 집계**돼 "실패 목록"에 뜸 |
+| 두 번째 조각부터의 환율 | 실시간 환율이 아니라 cost.yaml 고정값(USD 1380 vs 1351) — 한 스캔 안에서 원가 기준이 섞임 |
+
+고친 것
+
+1. **세일 스캔(`scope=sale`)** — Sale중 버튼은 이제 인기 판매처가 아니라 **활성 서버 판매처 전체(47곳)**의
+   Shopify 세일 컬렉션(`/collections/sale/products.json`)을 호출당 5곳씩 병렬로 읽는다(10회 호출).
+   세일 컬렉션이 없으면 전체 목록 1페이지에서 세일 상품만 고르고 `partial`로 표시한다.
+   판매처별 핸들은 `targets.json`의 `saleCollections`로 지정한다.
+2. 응답 크기 제한 시 남는 칸을 일반 상품으로 채운다(25건).
+3. `partial`은 실패가 아니다 — 확인한 판매처로 세고 실패 목록에 넣지 않는다.
+4. 실시간 환율을 인스턴스에서 30분 캐시해 **모든 조각이 같은 환율**을 쓴다.
+5. `blocked` 35곳 중 **HTTP 404·410·HTML 응답 20곳은 봇 차단이 아니라 Shopify가 아닌 것**이라
+   `disabled`(`reason: not_shopify`)로 바로잡았다. 403·503·타임아웃 15곳은 `blocked` 유지(우회하지 않는다).
+
+아직 배포본에서 확인하지 못한 것
+
+- 새 코드(세일 스캔)는 로컬에서 가짜 Shopify 응답 + 실제 Chromium으로 버튼 클릭까지 확인했다
+  (47곳 계획 → 10회 호출 → 403 판매처는 실패 목록, 나머지 세일 표시). **실제 사이트 대상 실행은 배포 후 확인이 필요하다.**
+  프리뷰 배포는 Vercel 인증 보호가 걸려 있어 이 세션에서 호출하지 못했다.
+- 각 판매처에 `sale` 컬렉션이 실제로 있는지는 판매처마다 다르다 → 아래 진단 API로 확인한다.
+
+### 진단 API — `GET /api/probe?sourceId=a,b,c` (최대 6곳)
+
+배포 환경에서 판매처마다 홈·`products.json`·세일 컬렉션(또는 sitemap)을 한 번씩 요청해
+상태 코드·건수·플랫폼 추정(shopify/salesforce-cc 등)·봇 차단 흔적만 돌려준다. 상품 데이터는 돌려주지 않는다.
+등록된 sourceId만 받고, 판매처 안의 요청은 순차다.
+
+```
+https://ziggu.vercel.app/api/probe?sourceId=kith-us,stussy-us,veja-us
+```
+
+- `saleCollection.products`가 0이거나 `null`이면 그 판매처의 실제 세일 핸들을 찾아 `saleCollections`에 넣는다.
+- `disabled` 판매처에서 `home.platform`이 `salesforce-cc`이고 `challenge`가 없으면 PC 수집기
+  (`jsonld-browser`)에 세일 목록 URL을 등록해 볼 만하다. `challenge`가 있으면 제휴 피드만 쓴다.
+
 ## 5. 이 작업에서 하지 않은 것
 
 - 유료 수집 서비스 가입, CAPTCHA 해결, TLS 지문 위장, 주거용 프록시, 로그인 세션 수집

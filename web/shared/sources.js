@@ -70,6 +70,10 @@
         nextPageSelector: raw.nextPageSelector || null,
         category: raw.category || "apparel",
         popular: raw.popular === true,
+        // Shopify 세일 컬렉션 핸들(예: "sale", "mens-sale"). URL 경로 조각이라 안전한 문자만 받는다
+        saleCollections: Array.isArray(raw.saleCollections)
+          ? raw.saleCollections.map(String).filter((h) => /^[a-z0-9][a-z0-9-]{0,60}$/i.test(h))
+          : [],
         support: {
           status,
           checkedAt: support.checkedAt || null,
