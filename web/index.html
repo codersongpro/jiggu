@@ -196,6 +196,13 @@ table.cost tr.free td{color:var(--rise)}
   background:var(--markSoft);color:var(--mark);
 }
 .pchip.miss{background:var(--wash);color:var(--muted);font-weight:500}
+.kr{font-size:12px;margin-top:3px;color:var(--muted)}
+.kr.cheaper{color:var(--rise);font-weight:600}
+.kr.dearer{color:var(--mark)}
+.krRow{display:flex;gap:6px;margin-bottom:10px}
+.krRow .searchbox{flex:1;padding:8px 11px}
+.krRow .searchbox input{font-size:14px}
+.krRow .btn{flex:0 0 auto;width:auto;padding:0 14px}
 .hint{font-size:12px;color:var(--muted);margin-top:9px;line-height:1.5}
 .brandSuggest{display:none}
 .brandSuggest.on{display:flex;flex-wrap:wrap;gap:6px;margin-top:9px}
@@ -347,7 +354,7 @@ nav button.on .dot{opacity:1}
     <div class="searchwrap">
       <div class="searchbox">
         <input id="q" type="search" enterkeyhint="search" autocomplete="off"
-               placeholder="브랜드, 옷 종류, 가격 중 하나만">
+               placeholder="브랜드 + 상품명 (예: 파타고니아 retro)">
         <button class="clr" id="qClear" aria-label="지우기">×</button>
       </div>
       <div class="brandSuggest" id="brandSuggest"></div>
@@ -366,15 +373,17 @@ nav button.on .dot{opacity:1}
           <option value="asc">가격 낮은순</option>
           <option value="desc">가격 높은순</option>
           <option value="brand">브랜드순</option>
+          <option value="kr">국내가 대비 저렴순</option>
         </select>
         <button class="btn primary" id="dropConfirmBtn" style="flex:2">확인</button>
       </div>
       <div class="parsed" id="parsed"></div>
-      <p class="hint" id="hint">필터는 이미 가져온 상품에 바로 적용됩니다. '확인'을 누르면 그 조건으로 서버에서 새로 찾아옵니다.</p>
+      <p class="hint" id="hint">필터는 이미 가져온 상품에 바로 적용됩니다. '확인'(또는 검색 키)을 누르면 그 조건으로 서버에서 새로 찾아옵니다 — 세일이 아닌 정가 상품도 나옵니다. 상품명은 판매처 표기대로 영문으로 넣으세요.</p>
     </div>
     <div class="filterbar" id="filterBar"></div>
     <div class="reshead"><h2 id="resTitle"></h2><span id="resCount"></span></div>
     <p class="note" id="siteStatus" style="padding:0 18px 10px"></p>
+    <button class="btn" id="krCompareBtn" style="display:none;margin:0 18px 10px;width:calc(100% - 36px)">보이는 상품 국내가 비교</button>
     <button class="btn" id="prodErrToggle" style="display:none;margin:0 18px 10px;width:calc(100% - 36px)"></button>
     <div id="prodErrList" style="display:none;padding:0 18px 10px"></div>
     <div id="itemList"></div>
@@ -452,6 +461,10 @@ nav button.on .dot{opacity:1}
   </div>
   <div class="sect">
     <h3>국내 시세 비교 <span class="conf">참고용 · 자동 매칭</span></h3>
+    <div class="krRow">
+      <div class="searchbox"><input id="krQuery" type="search" enterkeyhint="search" autocomplete="off" aria-label="국내 검색어"></div>
+      <button class="btn" id="krSearchBtn">다시 검색</button>
+    </div>
     <div id="shKorea"><p class="note">불러오는 중…</p></div>
   </div>
   <div class="sect">
@@ -890,6 +903,7 @@ function openBrandFromSignal(brandId){
    ============================================================ */
 let itemPage = 1;
 const PAGE_SIZE = 20;
+let visibleItems = []; // 지금 화면에 그려진 상품 — '국내가 비교'는 이것만 조회한다
 
 function buildEmptyItemsMessage(){
   const p = el('p', {class:'empty'});
@@ -964,6 +978,7 @@ function itemCard(it, why, showWhy){
     it.availability === 'out_of_stock' ? el('div', {class:'why', text:'품절'}) :
       it.availability === 'unknown' ? el('div', {class:'why', style:'color:var(--muted)', text:'재고 미확인'}) : null,
     isStale(it) ? el('div', {class:'why', style:'color:var(--muted)', text:'24시간 지난 정보 — 다시 조회하세요'}) : null,
+    koreaLine(it),
     showWhy ? el('div', {class:'why', text: why}) : null
   ]);
 
@@ -1010,17 +1025,25 @@ function renderItems(resetPage = true){
   if(sortMode === 'asc') list.sort((a, b) => total(a.it) - total(b.it));
   else if(sortMode === 'desc') list.sort((a, b) => total(b.it) - total(a.it));
   else if(sortMode === 'brand') list.sort((a, b) => brandLabel(a.it).localeCompare(brandLabel(b.it), 'ko'));
+  else if(sortMode === 'kr'){
+    // 국내 최저가보다 많이 싼 순. 아직 비교하지 않은 상품은 뒤로 보낸다
+    const gap = it => { const k = koreaCompare(it); return k && k.diffKrw !== null ? k.diffKrw : Infinity; };
+    list.sort((a, b) => gap(a.it) - gap(b.it));
+  }
   else list.sort((a, b) => b.score - a.score);
 
   $('#resTitle').textContent = auto ? '오늘의 추천' : '검색 결과';
   $('#resCount').textContent = list.length ? list.length + '건' : '';
   $('#siteStatus').textContent = statusLine();
 
+  $('#krCompareBtn').style.display = list.length ? 'block' : 'none';
   if(!list.length){
+    visibleItems = [];
     fill($('#itemList'), [buildEmptyItemsMessage()]);
     return;
   }
   const visible = list.slice(0, itemPage * PAGE_SIZE);
+  visibleItems = visible.map(v => v.it);
   const cards = visible.map(({it, why}) => itemCard(it, why, auto));
   if(visible.length < list.length){
     cards.push(el('div', {class:'btnrow', style:'padding:14px 18px'}, [
@@ -1162,7 +1185,7 @@ function openSheet(it){
   fill($('#shSrc'), srcRows);
 
   renderImgs(it);
-  loadKoreaPrice(it, c.status === 'ok' ? c.totalKrw : null);
+  loadKoreaPrice(it);
 
   const p = buildPost(it);
   $('#postTitle').value = p.title;
@@ -1171,47 +1194,134 @@ function openSheet(it){
   $('#sheetBg').classList.add('on');
 }
 
-/* ---------- 국내 시세 비교 ---------- */
-async function loadKoreaPrice(it, landedTotal){
-  const box = $('#shKorea');
-  fill(box, [el('p', {class:'note', text:'불러오는 중…'})]);
-  const q = `${brandLabel(it)} ${it.name}`;
+/* ---------- 국내 시세 비교 ----------
+   네이버쇼핑 검색 결과를 상품별로 기억해 두고 목록·상세가 같은 값을 쓴다.
+   원가는 모드·환율에 따라 바뀌므로 차액은 저장하지 않고 볼 때마다 지금 원가로 다시 계산한다. */
+const KOREA_CACHE = new Map(); // 상품 키 → {query, data}
+const KOREA_CONCURRENCY = 2;   // 네이버 API에 동시에 보내는 요청 수
+const koreaKey = it => `${it.sourceId}|${it.productId || it.sku}|${it.variantId || ''}`;
+const defaultKoreaQuery = it => `${brandLabel(it)} ${it.name}`;
+
+async function fetchKorea(it, q){
+  const res = await fetch(`/api/korea-price?q=${encodeURIComponent(q)}`);
+  const data = await res.json();
+  // '설정 필요'·조회 실패는 기억하지 않는다 — 키를 넣은 뒤 다시 시도할 수 있어야 한다
+  if(data.available) KOREA_CACHE.set(koreaKey(it), {query: q, data});
+  return data;
+}
+
+/** 지금 원가 기준 국내 최저가 비교. 비교 전이거나 원가 계산 불가면 차액은 null */
+function koreaCompare(it){
+  const hit = KOREA_CACHE.get(koreaKey(it));
+  if(!hit) return null;
+  const d = hit.data;
+  const total = costTotal(it);
+  const diffKrw = d.cheapestKrw && total !== null ? Math.round(total - d.cheapestKrw) : null;
+  return {
+    query: hit.query, data: d, cheapestKrw: d.cheapestKrw || null, diffKrw,
+    savingRate: diffKrw !== null ? Math.round(-diffKrw / d.cheapestKrw * 100) : null
+  };
+}
+
+function koreaLine(it){
+  const k = koreaCompare(it);
+  if(!k) return null;
+  if(!k.cheapestKrw) return el('div', {class:'kr', text:'국내 검색 결과 없음'});
+  const base = `국내 최저 ${won(k.cheapestKrw)}원`;
+  if(k.diffKrw === null) return el('div', {class:'kr', text: base});
+  return k.diffKrw < 0
+    ? el('div', {class:'kr cheaper', text: `${base} · ${won(-k.diffKrw)}원 저렴 (${k.savingRate}%)`})
+    : el('div', {class:'kr dearer', text: `${base} · 국내가 ${won(k.diffKrw)}원 더 쌈`});
+}
+
+/* 목록 비교 — 화면에 보이는 상품 중 아직 비교하지 않은 것만 차례로 조회한다 */
+async function runKoreaCompare(){
+  const btn = $('#krCompareBtn');
+  const todo = visibleItems.filter(it => !KOREA_CACHE.has(koreaKey(it)));
+  if(!todo.length){ toast('보이는 상품은 모두 비교했습니다'); return; }
+  btn.disabled = true;
+  let done = 0, failed = 0, stopReason = null;
+  const worker = async () => {
+    while(todo.length && !stopReason){
+      const it = todo.shift();
+      try{
+        const data = await fetchKorea(it, defaultKoreaQuery(it));
+        if(!data.available){ stopReason = data.reason || '국내 시세를 가져오지 못했습니다'; break; }
+      }catch(e){ failed++; }
+      done++;
+      btn.textContent = `국내가 비교 중 ${done}건`;
+    }
+  };
   try{
-    const url = `/api/korea-price?q=${encodeURIComponent(q)}` + (landedTotal ? `&landedKrw=${Math.round(landedTotal)}` : '');
-    const res = await fetch(url);
-    const data = await res.json();
+    await Promise.all(Array.from({length: KOREA_CONCURRENCY}, worker));
+  }finally{
+    btn.disabled = false;
+    btn.textContent = '보이는 상품 국내가 비교';
+    renderItems(false);
+  }
+  if(stopReason) toast(stopReason);
+  else toast(`${done - failed}건 비교 완료` + (failed ? ` · ${failed}건 실패` : ''));
+}
+$('#krCompareBtn').onclick = runKoreaCompare;
+
+function renderKoreaBox(it){
+  const box = $('#shKorea');
+  const k = koreaCompare(it);
+  const d = k.data;
+  if(!d.results.length){
+    fill(box, [el('p', {class:'note', text: `'${k.query}'로 검색된 국내 상품이 없습니다. 검색어를 줄이거나 한글 상품명으로 바꿔보세요.`})]);
+    return;
+  }
+  const nodes = [];
+  if(k.diffKrw !== null){
+    nodes.push(el('p', {class:'note', style: k.diffKrw < 0 ? 'color:var(--rise)' : 'color:var(--mark)',
+      text: k.diffKrw < 0
+        ? `해외 원가가 국내 최저가보다 ${won(-k.diffKrw)}원(${k.savingRate}%) 저렴합니다.`
+        : `국내 최저가가 ${won(k.diffKrw)}원 더 저렴합니다.`}));
+  }else{
+    nodes.push(el('p', {class:'note', text:'원가 계산이 안 된 상품이라 차액은 계산하지 않았습니다.'}));
+  }
+  nodes.push(el('p', {class:'note', text: `국내 최저 ${won(d.cheapestKrw)}원` + (d.medianKrw ? ` · 중간값 ${won(d.medianKrw)}원` : '') + ` · ${d.results.length}건`}));
+  d.results.slice(0, 5).forEach(r => {
+    const link = Urls.safeHref(r.link);
+    const label = `${r.mallName} · ${String(r.title).slice(0, 28)}`;
+    nodes.push(el('div', {class:'src'}, [
+      link ? el('a', {class:'shop', text: label, attrs:{href: link, target:'_blank', rel:'noopener noreferrer'}})
+           : el('span', {class:'shop', text: label}),
+      el('span', {class:'sp', text: won(r.priceKrw) + '원'})
+    ]));
+  });
+  nodes.push(el('p', {class:'note', text:
+    `검색어: "${d.usedQuery || k.query}"${d.shortened ? ' (결과가 없어 줄여서 다시 찾음)' : ''} — 중고·렌탈·해외직구 제외. ` +
+    '키워드 자동 검색이라 다른 색상·모델이 섞일 수 있으니 링크로 확인하세요.'}));
+  fill(box, nodes);
+}
+
+async function loadKoreaPrice(it, q){
+  const box = $('#shKorea');
+  const cached = KOREA_CACHE.get(koreaKey(it));
+  const query = (q || (cached && cached.query) || defaultKoreaQuery(it)).trim();
+  $('#krQuery').value = query;
+  if(!query){ fill(box, [el('p', {class:'note', text:'검색어를 넣어주세요.'})]); return; }
+  if(cached && cached.query === query){ renderKoreaBox(it); return; }
+  fill(box, [el('p', {class:'note', text:'불러오는 중…'})]);
+  try{
+    const data = await fetchKorea(it, query);
     if(curItem !== it) return;
     if(!data.available){
       fill(box, [el('p', {class:'note', text: data.reason || '국내 시세를 가져오지 못했습니다.'})]);
       return;
     }
-    if(!data.results.length){
-      fill(box, [el('p', {class:'note', text: `'${q}'로 검색된 국내 상품이 없습니다.`})]);
-      return;
-    }
-    const nodes = [];
-    if(data.diffKrw !== null && data.diffKrw !== undefined){
-      nodes.push(el('p', {class:'note', style: data.diffKrw < 0 ? 'color:var(--rise)' : 'color:var(--mark)',
-        text: data.diffKrw < 0
-          ? `해외가 국내 최저가보다 ${won(Math.abs(data.diffKrw))}원 저렴합니다.`
-          : `국내 최저가가 ${won(data.diffKrw)}원 더 저렴합니다.`}));
-    }
-    data.results.slice(0, 3).forEach(r => {
-      const link = Urls.safeHref(r.link);
-      const label = `${r.mallName} · ${String(r.title).slice(0, 28)}`;
-      nodes.push(el('div', {class:'src'}, [
-        link ? el('a', {class:'shop', text: label, attrs:{href: link, target:'_blank', rel:'noopener noreferrer'}})
-             : el('span', {class:'shop', text: label}),
-        el('span', {class:'sp', text: won(r.priceKrw) + '원'})
-      ]));
-    });
-    nodes.push(el('p', {class:'note', text: `검색어: "${q}" — 키워드 자동 검색이라 다른 색상·모델이 섞일 수 있습니다.`}));
-    fill(box, nodes);
+    renderKoreaBox(it);
+    if(q) renderItems(false); // 검색어를 바꿔 다시 찾았으면 목록 카드도 새 값으로
   }catch(e){
     if(curItem !== it) return;
     fill(box, [el('p', {class:'note', text:'국내 시세 조회 실패'})]);
   }
 }
+const krResearch = () => { if(curItem) loadKoreaPrice(curItem, $('#krQuery').value); };
+$('#krSearchBtn').onclick = krResearch;
+$('#krQuery').addEventListener('keydown', e => { if(e.key === 'Enter'){ e.preventDefault(); krResearch(); } });
 
 /* ---------- 이미지 ---------- */
 function safeImages(it){
@@ -1498,9 +1608,21 @@ $('#scanBtn').onclick = runScan;
 /* 상품탭 전용 조회 — 확인 버튼. Sale중은 건드리지 않는다. */
 async function runProductSearch(){
   const btn = $('#dropConfirmBtn');
-  const brandId = $('#fBrandSel').value;
+  // 검색창의 브랜드·상품명도 서버 조회에 쓴다(드롭다운 브랜드가 우선). 종류·가격은 화면 필터로만 쓴다
+  query = $('#q').value;
+  const f = currentFilters();
+  const brandId = f.brandId || '';
   const country = $('#fCountrySel').value;
   const sourceId = $('#fSourceSel').value;
+  const keyword = f.text.join(' ');
+  if(keyword && /[가-힣]/.test(keyword)){
+    toast(`판매처 상품명이 영문이라 '${f.text.filter(w => /[가-힣]/.test(w)).join(' ')}'은(는) 찾을 수 없습니다. 영문으로 입력하세요`);
+    return;
+  }
+  if(keyword && !brandId && !sourceId){
+    toast('상품명 검색은 브랜드를 함께 넣어주세요 (예: 파타고니아 retro)');
+    return;
+  }
   btn.disabled = true;
   const orig = btn.textContent;
   btn.textContent = '조회 중…';
@@ -1509,6 +1631,7 @@ async function runProductSearch(){
     if(brandId) params.brand = brandId;
     if(country) params.marketCountry = country;
     if(sourceId) params.sourceId = sourceId;
+    if(keyword) params.q = keyword;
     const run = await runChunkedScan(params, p => { btn.textContent = `조회 중 ${p.items}건`; });
 
     // 부분 실패든 성공이든 병합만 한다 — 기존 상품(특히 PC 수집분)을 지우지 않는다
@@ -1581,6 +1704,12 @@ $('#q').oninput = e => {
   clearTimeout(qTimer);
   qTimer = setTimeout(() => { query = v; renderItems(); }, 180);
 };
+$('#q').addEventListener('keydown', e => {
+  if(e.key !== 'Enter' || e.isComposing) return;
+  e.preventDefault();
+  $('#brandSuggest').classList.remove('on'); clear($('#brandSuggest'));
+  runProductSearch();
+});
 $('#qClear').onclick = () => {
   query = ''; $('#q').value = '';
   $('#brandSuggest').classList.remove('on'); clear($('#brandSuggest'));

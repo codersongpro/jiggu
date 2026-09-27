@@ -303,3 +303,41 @@ test("Shopify가 아닌 판매처(404/410/HTML)는 blocked가 아니라 disabled
   assert.ok(scan.SOURCES.some((s) => s.support.status === "blocked" && /403/.test(s.support.error)));
   assert.ok(!scan.SOURCES.some((s) => s.support.status === "blocked" && /HTTP (404|410)/.test(s.support.error)));
 });
+
+test("상품 검색 - 브랜드+검색어로 세일이 아닌 정가 상품까지 찾는다", async () => {
+  const products = [
+    shopifyProduct(1, { title: "Everyday Crew Sock" }),
+    // 정가 상품 (compare_at_price 없음)
+    shopifyProduct(2, {
+      title: "Icon Crew Sock",
+      variants: [{ id: 21, sku: "ICON", price: "18.00", compare_at_price: null, available: true, option1: "M", option2: "Black", grams: 100 }],
+    }),
+    shopifyProduct(3, { title: "Logo Hoodie" }),
+  ];
+  const all = await runAll({ brand: "스탠스", q: "Crew  sock" }, () => ({ body: JSON.stringify({ products }) }));
+  assert.ok(all.finished);
+  const names = [...new Set(all.items.map((it) => it.name))].sort();
+  assert.deepStrictEqual(names, ["Everyday Crew Sock", "Icon Crew Sock"], "검색어의 모든 단어가 들어간 상품만 남는다");
+  assert.ok(all.items.some((it) => !it.onSale), "세일이 아닌 상품도 결과에 나와야 한다");
+  all.sourceResults.forEach((sr) => assert.strictEqual(sr.scope.kind, "search"));
+});
+
+test("상품 검색 - 태그·상품 종류로도 찾는다", () => {
+  const p = shopifyProduct(1, { title: "The Classic", product_type: "Fleece Jacket", tags: ["retro-x", "outerwear"] });
+  assert.ok(scan.matchesKeywords(p, scan.parseKeywords("fleece retro-x")));
+  assert.ok(!scan.matchesKeywords(p, scan.parseKeywords("down")));
+  assert.deepStrictEqual(scan.parseKeywords(" A  Nano Puff "), ["nano", "puff"], "한 글자 단어는 버린다");
+});
+
+test("상품 검색 - 브랜드·판매처 없이 검색어만 보내면 전체 판매처를 훑지 않고 거부한다", async () => {
+  const { code, body, calls } = await runScan({ q: "sock" }, () => ({ body: okBody }));
+  assert.strictEqual(code, 400);
+  assert.match(body.error, /브랜드/);
+  assert.strictEqual(calls.filter((u) => !u.includes("frankfurter")).length, 0);
+});
+
+test("상품 검색 - 세일 스캔(scope=sale)에는 검색어를 적용하지 않는다", async () => {
+  const { code, body } = await runScan({ scope: "sale", q: "nothing-matches" }, () => ({ body: okBody }));
+  assert.strictEqual(code, 200);
+  assert.ok(body.items.length > 0);
+});

@@ -149,11 +149,32 @@ function makeCursor(plan, sourceIndex, page) {
   return `${plan[sourceIndex].sourceId}:${page}`;
 }
 
+const MAX_KEYWORD_LENGTH = 60;
+
+/** 검색어 → 소문자 단어 목록. 한 글자 단어는 버린다(화면 검색과 같은 규칙) */
+function parseKeywords(raw) {
+  return String(raw || "")
+    .slice(0, MAX_KEYWORD_LENGTH)
+    .toLowerCase()
+    .split(/\s+/)
+    .filter((w) => w.length > 1);
+}
+
+/** Shopify 원본 상품이 검색어를 모두 포함하는지 — 상품명·종류·태그·브랜드(vendor)에서 찾는다 */
+function matchesKeywords(product, keywords) {
+  if (!keywords || !keywords.length) return true;
+  const tags = Array.isArray(product.tags) ? product.tags.join(" ") : String(product.tags || "");
+  const hay = `${product.title || ""} ${product.product_type || ""} ${tags} ${product.vendor || ""}`.toLowerCase();
+  return keywords.every((w) => hay.includes(w));
+}
+
 /** Shopify 상품 배열 → 원가까지 붙은 앱 상품 */
-function toItems(products, source, cfg, mode, brandId) {
+function toItems(products, source, cfg, mode, brandId, keywords) {
   const normalized = [];
   let rejected = 0;
   products.forEach((p) => {
+    // 검색어에 안 맞는 상품은 거절이 아니라 "이번 검색 범위 밖"이다 — rejected로 세지 않는다
+    if (!matchesKeywords(p, keywords)) return;
     const item = normalizeProduct(p, source);
     if (!item) {
       rejected++;
@@ -267,7 +288,7 @@ async function scanSaleSource(source, cfg, mode, opts) {
     };
   }
 
-  const { normalized, rejected } = toItems(products, source, cfg, mode, opts.brandId);
+  const { normalized, rejected } = toItems(products, source, cfg, mode, opts.brandId, null);
   const onSale = normalized.filter((it) => it.listPrice > it.salePrice).sort((a, b) => b.offRate - a.offRate);
   let items = onSale;
   if (items.length > MAX_SALE_ITEMS_PER_SOURCE) {
@@ -327,7 +348,7 @@ async function scanSourcePage(source, page, cfg, mode, opts) {
   }
 
   const products = data.products;
-  const { normalized, rejected } = toItems(products, source, cfg, mode, opts.brandId);
+  const { normalized, rejected } = toItems(products, source, cfg, mode, opts.brandId, opts.keywords);
 
   const onSale = normalized.filter((it) => it.listPrice > it.salePrice).sort((a, b) => b.offRate - a.offRate);
   const regular = normalized
@@ -380,6 +401,15 @@ module.exports = async function handler(req, res) {
   const sourceIdParam = q.sourceId ? String(q.sourceId).trim() : "";
   const marketCountry = q.marketCountry ? String(q.marketCountry).trim().toUpperCase() : "";
   const saleScope = q.scope === "sale";
+  // 상품 검색어 — 세일 여부와 상관없이 정가 상품까지 찾는다. 세일 스캔(scope=sale)에는 쓰지 않는다
+  const keywords = saleScope ? [] : parseKeywords(q.q);
+
+  // 검색어만으로 활성 판매처 전체(80곳 이상 × 여러 페이지)를 훑으면 서버리스 조각이 수백 번 필요하다.
+  // 브랜드나 판매처로 범위를 좁힌 검색만 받는다.
+  if (keywords.length && !brandId && !sourceIdParam) {
+    res.status(400).json({ error: "상품 검색은 브랜드나 판매처를 함께 지정해야 합니다 (예: 산드로 원피스)" });
+    return;
+  }
 
   const cfg = loadConfig();
 
@@ -440,6 +470,8 @@ module.exports = async function handler(req, res) {
   // 세일 스캔은 브랜드를 지정해도 "세일 컬렉션" 범위다 — 전체 목록 범위와 섞지 않는다
   const scope = saleScope
     ? { kind: "sale", value: brandId || null }
+    : keywords.length
+    ? { kind: "search", value: `${brandId || sourceIdParam}|${keywords.join(" ")}` }
     : brandId
     ? { kind: "brand", value: brandId }
     : onlyPopular
@@ -498,6 +530,7 @@ module.exports = async function handler(req, res) {
     const source = plan[sourceIndex];
     const result = await scanSourcePage(source, page, cfg, mode, {
       brandId: brandId || null,
+      keywords,
       uncapped: !!(brandId || sourceIdParam),
       scope,
     });
@@ -540,6 +573,7 @@ module.exports = async function handler(req, res) {
       kind: s.kind,
     })),
     scope,
+    query: keywords.join(" "),
     sourceResults,
     // 아래 세 값은 "이번 조각에서 처리한 소스 수"다. 전체 진행률은 웹이 누적한다.
     sitesTotal: sourceResults.length,
@@ -562,4 +596,6 @@ module.exports.scanSourcePage = scanSourcePage;
 module.exports.scanSaleSource = scanSaleSource;
 module.exports.parseCursor = parseCursor;
 module.exports.classifyHttp = classifyHttp;
+module.exports.parseKeywords = parseKeywords;
+module.exports.matchesKeywords = matchesKeywords;
 module.exports.SOURCES = SOURCES;

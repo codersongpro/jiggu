@@ -88,7 +88,8 @@ async function openApp(t, opts) {
       return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ config: CFG, configAsOf: "2026-09-03" }) });
     }
     if (url.pathname === "/api/korea-price") {
-      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ available: false, reason: "설정 필요" }) });
+      const body = o.korea ? o.korea(url) : { available: false, reason: "설정 필요" };
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
     }
     if (url.pathname === "/api/scan") {
       const body = o.scan ? o.scan(url) : { items: [], sourceResults: [], errors: [], nextCursor: null, schemaVersion: 2 };
@@ -353,6 +354,96 @@ test("웹 스캔 — cursor를 끝까지 이어받고 부분 실패에도 기존
     await page.click("#prodErrToggle");
     const errText = await page.textContent("#prodErrList");
     assert.match(errText, /rate_limited/);
+  } finally {
+    await browser.close();
+  }
+});
+
+test("상품 검색 — 브랜드+상품명으로 정가 상품까지 찾고 국내가와 비교한다", { concurrency: false }, async (t) => {
+  if (!chromium) return t.skip("playwright 미설치");
+
+  const scanCalls = [];
+  const koreaCalls = [];
+  const scan = (url) => {
+    scanCalls.push(Object.fromEntries(url.searchParams));
+    return {
+      schemaVersion: 2,
+      collectedAt: new Date().toISOString(),
+      chunk: true,
+      nextCursor: null,
+      plannedSources: [{ sourceId: "rei-us", shopName: "REI" }],
+      sourceResults: [{ sourceId: "rei-us", sourceShop: "REI", status: "ok", scope: { kind: "search", value: "patagonia|retro" }, accepted: 2 }],
+      items: [
+        item({ productId: "r1", name: "Classic Retro-X Fleece Jacket", salePrice: 299, listPrice: 299 }),
+        item({ productId: "r2", name: "Retro Pile Vest", salePrice: 99, listPrice: 139 }),
+      ],
+      errors: [],
+      fxRates: { USD: 1380, EUR: 1490, JPY: 9.2 },
+    };
+  };
+  const korea = (url) => {
+    const q = url.searchParams.get("q");
+    koreaCalls.push(q);
+    // 레트로X는 국내가 비싸고(해외가 저렴), 파일 베스트는 국내가 아주 싸다
+    const cheapest = /Retro-X/.test(q) ? 900000 : 10000;
+    return {
+      available: true, query: q, usedQuery: q, shortened: false, confidence: "low",
+      results: [{ title: "국내 상품", priceKrw: cheapest, mallName: "몰", link: "https://shopping.naver.com/x" }],
+      cheapestKrw: cheapest, medianKrw: cheapest,
+    };
+  };
+
+  let app;
+  try {
+    app = await openApp(t, { scan, korea });
+  } catch (e) {
+    return t.skip("chromium 실행 불가: " + e.message);
+  }
+  const { browser, page, errors } = app;
+  try {
+    await page.click('nav button[data-view="v-items"]');
+
+    // 한글 상품명은 서버로 보내지 않고 안내한다
+    await page.fill("#q", "파타고니아 레트로");
+    await page.press("#q", "Enter");
+    await page.waitForFunction(() => /영문/.test(document.querySelector("#toast").textContent));
+    assert.strictEqual(scanCalls.length, 0);
+
+    // 브랜드 없이 상품명만이면 서버를 부르지 않는다
+    await page.fill("#q", "retro");
+    await page.press("#q", "Enter");
+    await page.waitForFunction(() => /브랜드를 함께/.test(document.querySelector("#toast").textContent));
+    assert.strictEqual(scanCalls.length, 0);
+
+    await page.fill("#q", "파타고니아 retro");
+    await page.press("#q", "Enter");
+    await page.waitForFunction(() => document.querySelectorAll(".pitem").length === 2);
+    assert.strictEqual(scanCalls.length, 1);
+    assert.strictEqual(scanCalls[0].brand, "patagonia");
+    assert.strictEqual(scanCalls[0].q, "retro");
+    assert.strictEqual(scanCalls[0].scope, undefined, "세일 스캔이 아니다");
+
+    // 국내가 비교 → 카드에 차액이 붙고, 국내가 대비 저렴순으로 정렬된다
+    await page.click("#krCompareBtn");
+    await page.waitForFunction(() => document.querySelectorAll(".pitem .kr").length === 2);
+    assert.strictEqual(koreaCalls.length, 2);
+    await page.selectOption("#fSortSel", "kr");
+    const first = await page.$eval(".pitem", (e) => ({ name: e.querySelector(".pname").textContent, kr: e.querySelector(".kr").className }));
+    assert.match(first.name, /Retro-X/);
+    assert.match(first.kr, /cheaper/);
+    const krTexts = await page.$$eval(".pitem .kr", (els) => els.map((e) => e.textContent));
+    assert.ok(krTexts.some((x) => /국내가 .*더 쌈/.test(x)));
+
+    // 상세는 캐시를 재사용하고, 검색어를 바꿔 다시 찾을 수 있다
+    await page.click(".pitem");
+    await page.waitForFunction(() => /저렴합니다/.test(document.querySelector("#shKorea").textContent));
+    assert.strictEqual(koreaCalls.length, 2, "이미 비교한 상품은 다시 조회하지 않는다");
+    await page.fill("#krQuery", "파타고니아 레트로X");
+    await page.click("#krSearchBtn");
+    await page.waitForFunction(() => /파타고니아 레트로X/.test(document.querySelector("#shKorea").textContent));
+    assert.strictEqual(koreaCalls[2], "파타고니아 레트로X");
+
+    assert.deepStrictEqual(errors, []);
   } finally {
     await browser.close();
   }

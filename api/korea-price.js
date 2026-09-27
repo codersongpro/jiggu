@@ -1,4 +1,5 @@
-// 국내 시세 비교 — 상품 상세를 열 때 그 상품 하나만 온디맨드로 조회한다.
+// 국내 시세 비교 — 호출당 상품 하나만 온디맨드로 조회한다. 상품 상세를 열 때, 또는
+// 상품 목록의 '국내가 비교' 버튼으로 화면에 보이는 상품만 차례로 조회한다.
 // 스캔 한 번에 수천 개 상품을 전부 네이버와 비교하는 건 서버리스 타임아웃상 불가능해서
 // 이렇게 설계했다.
 //
@@ -34,9 +35,48 @@ function stripHtml(s) {
   return String(s || "").replace(/<[^>]*>/g, "");
 }
 
+const MAX_QUERY_LENGTH = 100;
+const DISPLAY = 10;
+const FALLBACK_WORDS = 4; // 결과가 없으면 앞 단어 몇 개(브랜드 + 핵심 모델명)로 한 번 더 찾는다
+
+/** 영문 상품명이 길면 네이버에서 0건이 나오기 쉽다 — 앞부분만 남긴 짧은 검색어 */
+function shortenQuery(q) {
+  const words = String(q).split(/\s+/).filter(Boolean);
+  if (words.length <= FALLBACK_WORDS) return null;
+  return words.slice(0, FALLBACK_WORDS).join(" ");
+}
+
+/** 중앙값 — 최저가 하나는 다른 상품(액세서리·부품)이 섞였을 때 크게 틀어진다 */
+function median(nums) {
+  if (!nums.length) return null;
+  const sorted = nums.slice().sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[mid] : Math.round((sorted[mid - 1] + sorted[mid]) / 2);
+}
+
+async function searchNaver(query, headers) {
+  // sort=sim(정확도순)으로 관련 상품을 먼저 받고, 그 안에서 최저가를 고른다.
+  // sort=asc(가격순)는 키워드가 일부만 맞는 싼 부속품이 먼저 잡힌다.
+  // exclude: 중고·렌탈·해외직구(cbshop)를 뺀다 — 비교 대상은 "국내에서 새 상품을 사는 가격"이다.
+  const url =
+    `https://openapi.naver.com/v1/search/shop.json?query=${encodeURIComponent(query)}` +
+    `&display=${DISPLAY}&sort=sim&exclude=used:rental:cbshop`;
+  const data = await fetchWithTimeout(url, headers);
+  const items = Array.isArray(data.items) ? data.items : [];
+  return items
+    .map((it) => ({
+      title: stripHtml(it.title),
+      priceKrw: Number(it.lprice) || null,
+      mallName: it.mallName || "",
+      link: it.link || "",
+    }))
+    .filter((it) => it.priceKrw > 0);
+}
+
 module.exports = async function handler(req, res) {
-  const q = (req.query && req.query.q ? String(req.query.q) : "").trim();
-  const landedKrw = req.query && req.query.landedKrw ? Number(req.query.landedKrw) : null;
+  const q = (req.query && req.query.q ? String(req.query.q) : "").trim().slice(0, MAX_QUERY_LENGTH);
+  const landedRaw = req.query && req.query.landedKrw ? Number(req.query.landedKrw) : null;
+  const landedKrw = Number.isFinite(landedRaw) && landedRaw > 0 ? landedRaw : null;
 
   if (!q) {
     res.status(400).json({ available: false, reason: "검색어(q)가 없습니다" });
@@ -54,33 +94,38 @@ module.exports = async function handler(req, res) {
   }
 
   try {
-    const url = `https://openapi.naver.com/v1/search/shop.json?query=${encodeURIComponent(q)}&display=5&sort=asc`;
-    const data = await fetchWithTimeout(url, {
-      "X-Naver-Client-Id": clientId,
-      "X-Naver-Client-Secret": clientSecret,
-    });
+    const headers = { "X-Naver-Client-Id": clientId, "X-Naver-Client-Secret": clientSecret };
+    let usedQuery = q;
+    let results = await searchNaver(q, headers);
+    const shorter = results.length ? null : shortenQuery(q);
+    if (shorter) {
+      usedQuery = shorter;
+      results = await searchNaver(shorter, headers);
+    }
+    results.sort((a, b) => a.priceKrw - b.priceKrw);
 
-    const items = Array.isArray(data.items) ? data.items : [];
-    const results = items.map((it) => ({
-      title: stripHtml(it.title),
-      priceKrw: Number(it.lprice) || null,
-      mallName: it.mallName || "",
-      link: it.link || "",
-    })).filter((it) => it.priceKrw > 0);
-
-    const cheapestKrw = results.length ? Math.min(...results.map((r) => r.priceKrw)) : null;
+    const prices = results.map((r) => r.priceKrw);
+    const cheapestKrw = prices.length ? prices[0] : null;
+    const medianKrw = median(prices);
     const diffKrw = cheapestKrw != null && landedKrw != null ? landedKrw - cheapestKrw : null;
 
     res.status(200).json({
       available: true,
       query: q,
+      usedQuery, // 결과가 없어 짧은 검색어로 다시 찾았다면 그 검색어
+      shortened: usedQuery !== q,
       confidence: "low", // 키워드 매칭이라 다른 상품·다른 컬러가 섞일 수 있다. 참고용.
       results,
       cheapestKrw,
+      medianKrw,
       landedKrw,
       diffKrw, // 음수면 해외가 국내보다 저렴, 양수면 국내가 더 저렴
+      savingRate: diffKrw != null && cheapestKrw ? Math.round((-diffKrw / cheapestKrw) * 100) : null,
     });
   } catch (e) {
     res.status(200).json({ available: false, reason: "네이버쇼핑 조회 실패: " + e.message });
   }
 };
+
+module.exports.shortenQuery = shortenQuery;
+module.exports.median = median;
