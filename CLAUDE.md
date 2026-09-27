@@ -100,7 +100,9 @@
 - `runtime`: `server`(Vercel에서 조회) / `pc`(브라우저 수집기)
 - `adapter`: `shopify-products-json` / `jsonld-browser` / `rei-us`
 - `region`: 원가 프로필(US/EU/JP). 모르면 `null` → 원가 계산 미완료
-- `support.status`: `supported`는 **실제 수집 결과를 확인한 뒤에만** 붙인다
+- `support.status`: `supported`는 **실제 수집 결과를 확인한 뒤에만** 붙인다.
+  `blocked`=실제 차단(403 등), `disabled`=방식 불일치(예: Shopify 아님). 둘 다 서버 스캔 제외
+- `saleCollections`: Shopify 세일 컬렉션 핸들. 없으면 `sale`을 시도한다
 
 ### 세일 감지 규칙
 | 신호 | 조건 |
@@ -143,16 +145,26 @@
 - `scripts/local-crawler/crawl.js` — CLI 계약(--source/--countries/--brand/--limit/
   --resume/--business/--output), 이어받기, 요청 간격·재시도·한도, 종료 코드 0/2/1
 - `scripts/feed-import/` — 숫자·통화·재고·XML 파싱 수정, schemaVersion 2 출력
+- `scripts/export-excel.js` — 수집 결과 → 엑셀(상품/판매처 상태/브랜드 요약/실행 정보 4시트).
+  원가는 저장값이 아니라 지금 cost.yaml 기준으로 재계산하고, 계산 불가 시장은 칸을 비운다
 - `config/targets.json` — 판매처 정본(102곳: 서버 82 + PC 20). 8개국 검증 후보 등록
 - `config/cost.yaml` — `markets` 섹션 추가(시장 → 통화·원가 프로필·VAT). GB는 프로필 없음
 - `web/index.html` — 안전 렌더링(textContent), 원자적 가져오기, IndexedDB 복원,
   국가·판매처 필터, 서버와 일치하는 원가, 조각 스캔 진행
-- `tests/` — `npm test` 94건 (네트워크 미사용. 브라우저 회귀는 fixture 라우팅)
+- `tests/` — `npm test` 101건 (네트워크 미사용. 브라우저 회귀는 fixture 라우팅)
+
+### 2026-09-23 스캔 수정 (docs/VERIFICATION.md 4-1)
+- Sale중 스캔 버튼이 인기 판매처(실제로는 2곳)만 보던 문제 → `scope=sale`로 활성 서버 판매처 전체의
+  Shopify 세일 컬렉션을 호출당 5곳씩 병렬 조회. 판매처별 핸들은 `targets.json` `saleCollections`
+- 응답 크기 제한 시 7건만 반환하던 버그, `partial`을 실패로 세던 문제, 조각마다 환율이 다르던 문제 수정
+- `api/probe.js` — 배포 환경에서 판매처별 수집 가능 여부를 진단(상품 데이터는 반환하지 않음)
+- 404·410·HTML로 실패한 20곳은 `blocked`가 아니라 `disabled`(not_shopify). 403 등 실제 차단 15곳만 `blocked`
 
 ### 실제 배포 스캔으로 확인된 차단 사이트 (2026-09-03 / 09-05)
 코치·마이클코어스·케이트스페이드·랄프로렌·뉴발란스·라코스테·레포메이션·올세인츠·가니·
 아크테릭스·파타고니아·룰루레몬·골든구스·어그·살로몬 등 35곳이 403/404/410/503/파싱 에러로
-실패해 `support.status: "blocked"`로 기록돼 있고 스캔 대상에서 제외된다.
+실패해 스캔 대상에서 제외된다. 그중 403·503·타임아웃 15곳은 `blocked`, 404·410·HTML 응답 20곳은
+Shopify가 아니어서 `disabled`(not_shopify)로 구분했다(2026-09-23).
 **이번 작업에서 재확인한 것은 아니다** — 기록을 그대로 보존했다.
 
 ### 미검증 — 여기서부터 확인이 필요하다
@@ -162,7 +174,7 @@
 - [ ] 여러 몰 교차 매칭 → 최저가 구입처 자동 선택 (지금은 판매처 하나당 소스 하나)
 - [ ] 스캔 결과 저장소(Vercel Postgres/KV 등) → 어제 대비 세일 급변 감지 복원
 - [ ] 국내 시세 매칭 정확도 (키워드 검색 → SKU/바코드 매칭)
-- [ ] `output/excel.py`, 텔레그램 알림
+- [ ] 텔레그램 알림
 - [ ] 피드 자동 갱신 (키는 반드시 환경변수로)
 - [ ] 일본 라쿠텐 공식 API 연동
 - [ ] 상품명 한글 번역 (지금은 영문 원문 그대로 표시)

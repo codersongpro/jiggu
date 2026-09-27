@@ -217,3 +217,89 @@ test("R04 - 품절 variant의 가격을 최저가로 쓰지 않는다", () => {
   assert.strictEqual(item.salePrice, 60);
   assert.strictEqual(item.sizes, "M", "품절 사이즈를 판매 가능한 것처럼 보여주면 안 된다");
 });
+
+// ---- 2026-09-23 스캔 수정 회귀 테스트 ----
+
+function regularProduct(id) {
+  return shopifyProduct(id, {
+    variants: [{ id: id * 10 + 1, sku: "R" + id, price: "40.00", compare_at_price: null, available: true, option1: "S", option2: "Black", grams: 300 }],
+  });
+}
+
+test("응답 크기 제한 - 세일 상품이 없으면 남는 칸을 일반 상품으로 채운다 (예전: 7건만 반환)", async () => {
+  const body = JSON.stringify({ products: Array.from({ length: 250 }, (_, i) => regularProduct(i + 1)) });
+  const { body: out } = await runScan({ onlyPopular: "1" }, () => ({ body }));
+  assert.strictEqual(out.items.length, 25);
+  assert.strictEqual(out.sourceResults[0].status, "partial");
+  // 응답 크기 제한은 우리가 자른 것이지 판매처 실패가 아니다
+  assert.strictEqual(out.errors.length, 0);
+  assert.strictEqual(out.sitesFailed, 0);
+  assert.strictEqual(out.sitesOk, 1);
+});
+
+test("세일 스캔 - 인기 판매처만이 아니라 활성 판매처 전체의 세일 컬렉션을 5곳씩 본다", async () => {
+  const saleBody = JSON.stringify({ products: [shopifyProduct(1), shopifyProduct(2), regularProduct(3)] });
+  const all = await runAll({ scope: "sale" }, () => ({ body: saleBody }));
+  assert.ok(all.finished);
+  const active = scan.SOURCES.filter((s) => s.runtime === "server" && s.adapter === "shopify-products-json" && s.support.status !== "blocked" && s.support.status !== "disabled");
+  assert.strictEqual(all.plannedSources.length, active.length);
+  assert.ok(all.plannedSources.length > 2, "인기 판매처 2곳만 보던 예전 동작으로 돌아가면 안 된다");
+  assert.strictEqual(all.chunks, Math.ceil(active.length / 5));
+  // 요청은 세일 컬렉션 경로로만, 판매처당 한 번씩
+  assert.ok(all.calls.every((u) => u.includes("/collections/sale/products.json")));
+  assert.strictEqual(new Set(all.calls).size, all.calls.length);
+  // 세일 상품만 남고, 범위는 sale이다
+  assert.ok(all.items.length > 0);
+  all.items.forEach((it) => assert.ok(it.onSale && it.scopeId.includes("|sale|")));
+  all.sourceResults.forEach((sr) => assert.strictEqual(sr.status, "ok"));
+});
+
+test("세일 스캔 - 세일 컬렉션이 없으면(404) 전체 목록 1페이지에서 세일만 고르고 partial로 표시한다", async () => {
+  const listBody = JSON.stringify({ products: [shopifyProduct(1), regularProduct(2)] });
+  const responder = (url) => (url.includes("/collections/") ? { status: 404, body: "not found" } : { body: listBody });
+  const { body } = await runScan({ scope: "sale", sourceId: "stance-us" }, responder);
+  const sr = body.sourceResults[0];
+  assert.strictEqual(sr.status, "partial");
+  assert.match(sr.error, /세일 컬렉션이 없어/);
+  assert.strictEqual(body.items.length, 1);
+  assert.strictEqual(body.errors.length, 0);
+});
+
+test("세일 스캔 - 403이면 그 판매처는 멈추고 blocked로 기록한다(다른 경로로 재시도하지 않는다)", async () => {
+  const { body, calls } = await runScan({ scope: "sale", sourceId: "stance-us" }, () => ({ status: 403, body: "denied" }));
+  assert.strictEqual(body.sourceResults[0].status, "blocked");
+  assert.strictEqual(body.errors.length, 1);
+  assert.strictEqual(calls.filter((u) => !u.includes("frankfurter")).length, 1);
+});
+
+test("세일 스캔 - 세일 컬렉션이 가득 차면 다음 페이지를 이어 읽고, 한도를 넘으면 partial", async () => {
+  const full = JSON.stringify({ products: Array.from({ length: 250 }, (_, i) => shopifyProduct(i + 1)) });
+  const { body, calls } = await runScan({ scope: "sale", sourceId: "stance-us" }, () => ({ body: full }));
+  const urls = calls.filter((u) => !u.includes("frankfurter"));
+  assert.deepStrictEqual(urls.map((u) => new URL(u).searchParams.get("page")), ["1", "2"]);
+  assert.strictEqual(body.sourceResults[0].status, "partial");
+  assert.ok(body.items.length <= 200, "응답 크기 제한");
+  assert.strictEqual(body.sourceResults[0].saleCount, 500);
+});
+
+test("판매처별 세일 컬렉션 핸들(saleCollections)을 쓴다", async () => {
+  const sourcesLib = require("../web/shared/sources.js");
+  const { sources } = sourcesLib.loadSources({
+    sources: [{ sourceId: "x-us", shopName: "X", kind: "official", brandId: "x", marketCountry: "US", currency: "USD", region: "US", baseUrl: "https://x.example.com", adapter: "shopify-products-json", runtime: "server", saleCollections: ["womens-sale", "../evil"], support: { status: "unverified" } }],
+  });
+  assert.deepStrictEqual(sources[0].saleCollections, ["womens-sale"], "경로 조작 문자는 버린다");
+  const { loadConfig } = require("../api/_lib/landedCost.js");
+  let seen = [];
+  await withFetch((url) => { seen.push(url); return { body: JSON.stringify({ products: [shopifyProduct(1)] }) }; }, async () => {
+    await scan.scanSaleSource(sources[0], loadConfig(), "proxy", { scope: { kind: "sale", value: null } });
+  });
+  assert.ok(seen[0].startsWith("https://x.example.com/collections/womens-sale/products.json"));
+});
+
+test("Shopify가 아닌 판매처(404/410/HTML)는 blocked가 아니라 disabled(not_shopify)로 기록돼 있다", () => {
+  const disabled = scan.SOURCES.filter((s) => s.support.status === "disabled");
+  assert.ok(disabled.length > 0);
+  // 403 등 실제 차단은 blocked로 남는다
+  assert.ok(scan.SOURCES.some((s) => s.support.status === "blocked" && /403/.test(s.support.error)));
+  assert.ok(!scan.SOURCES.some((s) => s.support.status === "blocked" && /HTTP (404|410)/.test(s.support.error)));
+});

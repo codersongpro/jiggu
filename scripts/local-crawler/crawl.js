@@ -59,6 +59,7 @@ function usage() {
   --business    사업자 사입 모드로 원가 계산 (기본: 구매대행)
   --concurrency 동시에 보는 판매처 수 (기본 ${DEFAULT_CONCURRENCY})
   --output      결과 JSON 경로 (기본 output/local-scan-<타임스탬프>.json)
+  --xlsx        수집이 끝나면 같은 이름의 엑셀(.xlsx)도 함께 만든다
   --headed      브라우저 창을 띄워서 실행 (동작 확인용)
 
 등록된 판매처는 config/targets.json에서 확인한다.`);
@@ -70,7 +71,7 @@ function parseArgs(argv) {
     const a = argv[i];
     if (!a.startsWith("--")) continue;
     const key = a.slice(2);
-    if (["business", "headed", "help"].includes(key)) {
+    if (["business", "headed", "help", "xlsx"].includes(key)) {
       flags[key] = true;
       continue;
     }
@@ -396,6 +397,21 @@ async function main() {
   fs.renameSync(tmp, outFile);
 
   console.log(`\n완료: ${items.length}건 → ${outFile}`);
+
+  // --xlsx: 같은 결과를 엑셀로도 정리한다 (실패해도 JSON 결과는 그대로 남는다)
+  if (flags.xlsx) {
+    try {
+      const { loadAndMerge, buildWorkbook } = require("../export-excel.js");
+      const merged = loadAndMerge([outFile]);
+      const { wb, rowCount } = buildWorkbook(merged.state, { cfg, mode, markup: 1.6, saleOnly: false, minOff: 0 }, merged);
+      const xlsxFile = outFile.replace(/\.json$/i, "") + ".xlsx";
+      await wb.xlsx.writeFile(xlsxFile);
+      console.log(`엑셀 생성 완료: ${rowCount}건 → ${xlsxFile}`);
+    } catch (err) {
+      console.warn("엑셀 생성 실패(수집 결과 JSON은 정상 저장됨):", err && err.message);
+    }
+  }
+
   printSummary(output.sourceResults);
   console.log("앱 설정 탭 > '수집 결과 가져오기'에서 이 파일을 열면 상품 탭에 합쳐집니다.");
 
